@@ -53,6 +53,17 @@ then start chatting:
 python ~/.c0rtex/scripts/c0rtex.py
 ```
 
+### web interface
+
+for a friendlier chat experience, launch the web UI:
+```bash
+python3 scripts/c0rtex_gradio.py
+```
+
+then open http://localhost:3701 in your browser.
+
+**public demo:** set `share=True` in c0rtex_gradio.py to create a temporary public link (useful for demos, but anyone with the link can access your c0rtex instance).
+
 ## usage
 
 ```bash
@@ -126,6 +137,29 @@ pinchtab  # runs on http://localhost:9867
 ```
 
 if pinchtab isn't running, web browsing tools will fail gracefully with installation instructions.
+
+#### security considerations
+
+c0rtex uses prompt-based boundaries to isolate untrusted web content from the main agent. this prevents most prompt injection attacks, where malicious websites try to trick the ai into executing unintended commands.
+
+**current approach:**
+- web content is wrapped in clear `[UNTRUSTED CONTENT]` markers
+- system prompts instruct the model to ignore embedded instructions
+- works well with modern llms that respect boundaries
+
+**limitations:**
+- not cryptographically enforced (relies on llm behavior)
+- sophisticated attacks may bypass prompt-based protections
+- cannot guarantee 100% protection against all injection attempts
+
+**best practices:**
+- only browse trusted websites when c0rtex has access to sensitive tools
+- review extracted content before acting on it for critical operations
+- consider disabling sensitive tools during general web research
+- use separate instances for web research vs. system management
+
+**why not dual-model sandboxing?**
+running a separate llm instance to pre-process web content would provide stronger isolation, but requires significant additional vram (e.g., 6gb main + 1.5gb sandbox). to support diverse hardware configurations (4gb to 48gb+ vram), c0rtex uses prompt-based isolation that works everywhere while still providing meaningful protection.
 
 ## architecture
 
