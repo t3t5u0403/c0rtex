@@ -112,11 +112,7 @@ demo = gr.ChatInterface(
         "what's the weather like?",
         "browse to https://example.com and tell me what you see",
     ],
-    theme=gr.themes.Soft(
-        primary_hue="slate",
-        secondary_hue="blue",
-    ),
-    retry_btn="Retry",
+retry_btn="Retry",
     undo_btn="Undo",
     clear_btn="Clear",
 )
