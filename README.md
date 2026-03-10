@@ -53,6 +53,17 @@ then start chatting:
 python ~/.c0rtex/scripts/c0rtex.py
 ```
 
+### web interface
+
+for a friendlier chat experience, launch the web UI:
+```bash
+python3 scripts/c0rtex_gradio.py
+```
+
+then open http://localhost:3701 in your browser.
+
+**public demo:** set `share=True` in c0rtex_gradio.py to create a temporary public link (useful for demos, but anyone with the link can access your c0rtex instance).
+
 ## usage
 
 ```bash

@@ -6,3 +6,4 @@ markdown>=3.5.0
 beautifulsoup4>=4.12.0
 lxml>=5.0.0
 InquirerPy>=0.3.4
+gradio>=4.0.0
