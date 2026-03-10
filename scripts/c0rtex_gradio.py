@@ -37,7 +37,10 @@ def chat_with_c0rtex(message, history):
 
     # Add history (Gradio 4+ passes list of {"role": ..., "content": ...} dicts)
     for entry in history:
-        messages.append({"role": entry["role"], "content": entry["content"]})
+        content = entry.get("content") or ""
+        role = entry.get("role", "user")
+        if content:
+            messages.append({"role": role, "content": content})
 
     # Add current message
     messages.append({"role": "user", "content": message})
