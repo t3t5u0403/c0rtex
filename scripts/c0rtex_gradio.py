@@ -185,9 +185,9 @@ def chat_with_c0rtex(message, history):
 
 
 # Create Gradio interface
-with gr.Blocks(css=CSS, title="c0rtex") as demo:
+with gr.Blocks(title="c0rtex") as demo:
     gr.Markdown("# c0rtex\nprivacy-first ai assistant running locally")
-    gr.ChatInterface(fn=chat_with_c0rtex, type="messages")
+    gr.ChatInterface(fn=chat_with_c0rtex)
     gr.Markdown(
         f"<center style='color:#6c7086; font-size:0.8em;'>"
         f"chatting as: {USERNAME} &nbsp;|&nbsp; model: {MODEL} &nbsp;|&nbsp; {OLLAMA_HOST}"
@@ -201,4 +201,5 @@ if __name__ == "__main__":
         server_name="0.0.0.0",
         server_port=3701,
         share=False,  # Set to True to create public link
+        css=CSS,
     )
