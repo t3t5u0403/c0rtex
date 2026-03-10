@@ -8,6 +8,7 @@ access at: http://localhost:3701
 
 import gradio as gr
 import json
+import time
 import requests
 from datetime import datetime
 from c0rtex_log import get_logger
@@ -23,13 +24,42 @@ with open(SOUL_FILE, "r") as f:
 MODEL = "c0rtex"
 OLLAMA_URL = f"{OLLAMA_HOST}/api/chat"
 
+CSS = """
+.gradio-container { max-width: 860px !important; }
+footer { display: none !important; }
+.tool-block {
+    background: #1e1e2e;
+    border-left: 3px solid #ff9d00;
+    padding: 8px 12px;
+    margin: 6px 0;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.85em;
+    color: #cdd6f4;
+}
+.tool-name { color: #ff9d00; font-weight: bold; }
+.tool-result { color: #a6adc8; white-space: pre-wrap; }
+.tool-time { color: #6c7086; font-size: 0.8em; }
+"""
+
+
+def format_tool_block(tool_name, result, elapsed_ms):
+    """Format a tool call as a styled HTML block."""
+    # Truncate long results for display
+    display_result = result[:500] + "..." if len(result) > 500 else result
+    display_result = display_result.replace("<", "&lt;").replace(">", "&gt;")
+    return (
+        f'<div class="tool-block">'
+        f'<span class="tool-name">[tool: {tool_name}]</span> '
+        f'<span class="tool-time">({elapsed_ms}ms)</span><br>'
+        f'<span class="tool-result">{display_result}</span>'
+        f'</div>'
+    )
+
 
 def chat_with_c0rtex(message, history):
     """
-    Main chat handler. Takes user message and chat history,
-    returns c0rtex's response.
-
-    history format: [[user_msg, bot_msg], [user_msg, bot_msg], ...]
+    Streaming chat handler. Yields partial text as it arrives from Ollama.
     """
 
     # Build messages for Ollama
@@ -50,7 +80,7 @@ def chat_with_c0rtex(message, history):
 
     log.event("chat_request", message=message)
 
-    # Call Ollama
+    # First request — non-streaming to check for tool calls
     try:
         payload = {
             "model": MODEL,
@@ -58,64 +88,115 @@ def chat_with_c0rtex(message, history):
             "stream": False,
             "tools": TOOLS,
         }
-        print(f"DEBUG: sending {len(messages)} messages to {OLLAMA_URL}")
-        print(json.dumps(payload, indent=2)[:2000])
 
-        response = requests.post(OLLAMA_URL, json=payload, timeout=120)
-
-        if response.status_code != 200:
-            print(f"DEBUG: ollama returned {response.status_code}")
-            print(f"DEBUG: response body: {response.text[:1000]}")
-
+        response = requests.post(OLLAMA_URL, json=payload, timeout=300)
         response.raise_for_status()
         data = response.json()
 
-        # Check for tool calls
         msg = data.get("message", {})
         tool_calls = msg.get("tool_calls", [])
 
-        if tool_calls:
-            # Execute tools and get final response
-            results = []
-            for tool_call in tool_calls:
-                tool_name = tool_call.get("function", {}).get("name")
-                tool_args = tool_call.get("function", {}).get("arguments", {})
+        if not tool_calls:
+            # No tool calls — re-request with streaming
+            payload["stream"] = True
+            del payload["tools"]
+            payload["messages"] = messages
 
-                log.event("tool_call", tool_name=tool_name, tool_args=tool_args)
-                result = execute_tool(tool_name, tool_args)
-                results.append(f"[tool: {tool_name}]\n{result}")
-
-            # Add tool results to messages and get final response
-            messages.append({"role": "assistant", "content": msg.get("content", "")})
-            messages.append({"role": "user", "content": "\n\n".join(results)})
-
-            response = requests.post(
-                OLLAMA_URL,
-                json={
-                    "model": MODEL,
-                    "messages": messages,
-                    "stream": False,
-                },
-                timeout=120,
-            )
+            response = requests.post(OLLAMA_URL, json=payload, timeout=300, stream=True)
             response.raise_for_status()
-            data = response.json()
 
-        reply = data.get("message", {}).get("content", "")
-        log.event("chat_response", response_length=len(reply))
-        return reply
+            partial = ""
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                chunk = json.loads(line)
+                token = chunk.get("message", {}).get("content", "")
+                if token:
+                    partial += token
+                    yield partial
+                if chunk.get("done"):
+                    break
+
+            log.event("chat_response", response_length=len(partial))
+            return
+
+        # Handle tool calls
+        tool_output = ""
+        for tool_call in tool_calls:
+            tool_name = tool_call.get("function", {}).get("name")
+            tool_args = tool_call.get("function", {}).get("arguments", {})
+
+            log.event("tool_call", tool_name=tool_name, tool_args=tool_args)
+
+            # Show tool running status
+            tool_output += f'<div class="tool-block"><span class="tool-name">[tool: {tool_name}]</span> running...</div>\n'
+            yield tool_output
+
+            t0 = time.time()
+            try:
+                result = execute_tool(tool_name, tool_args)
+            except Exception as te:
+                result = f"error: {te}"
+            elapsed = int((time.time() - t0) * 1000)
+
+            log.event("tool_result", tool_name=tool_name, elapsed_ms=elapsed)
+
+            # Replace "running..." with actual result
+            tool_output = tool_output.replace(
+                f'<span class="tool-name">[tool: {tool_name}]</span> running...</div>',
+                f'{format_tool_block(tool_name, result, elapsed)[len("<div class="):]}'
+            )
+
+            messages.append({"role": "assistant", "content": msg.get("content") or ""})
+            messages.append({"role": "tool", "content": result})
+
+        yield tool_output + "\n\n"
+
+        # Stream the final response after tool results
+        try:
+            follow_up = {
+                "model": MODEL,
+                "messages": messages,
+                "stream": True,
+            }
+            response = requests.post(OLLAMA_URL, json=follow_up, timeout=300, stream=True)
+            response.raise_for_status()
+
+            partial = tool_output + "\n\n"
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                chunk = json.loads(line)
+                token = chunk.get("message", {}).get("content", "")
+                if token:
+                    partial += token
+                    yield partial
+                if chunk.get("done"):
+                    break
+
+            log.event("chat_response", response_length=len(partial))
+
+        except Exception as e:
+            yield tool_output + f"\n\ntimed out generating response after tool calls: {e}"
 
     except Exception as e:
         log.error("chat_error", str(e))
-        return f"error: {e}"
+        yield f"error: {e}"
 
 
 # Create Gradio interface
-demo = gr.ChatInterface(fn=chat_with_c0rtex)
+with gr.Blocks(css=CSS, title="c0rtex") as demo:
+    gr.Markdown("# c0rtex\nprivacy-first ai assistant running locally")
+    gr.ChatInterface(fn=chat_with_c0rtex, type="messages")
+    gr.Markdown(
+        f"<center style='color:#6c7086; font-size:0.8em;'>"
+        f"chatting as: {USERNAME} &nbsp;|&nbsp; model: {MODEL} &nbsp;|&nbsp; {OLLAMA_HOST}"
+        f"</center>"
+    )
 
 if __name__ == "__main__":
     print("Starting c0rtex web interface...")
-    print("Open http://localhost:3701 in your browser")
+    print(f"Open http://localhost:3701 in your browser")
     demo.launch(
         server_name="0.0.0.0",
         server_port=3701,
