@@ -120,7 +120,7 @@ def browse_and_extract(url: str, task: str) -> str:
         return f"error: browse rate limit reached ({BROWSE_RATE_LIMIT} calls per session)"
 
     if not pinchtab_health():
-        return "error: pinchtab is not running. start it with: systemctl --user start pinchtab"
+        return "error: pinchtab is not running. install with: npm install -g pinchtab\nthen start it: pinchtab"
 
     try:
         log.event("browse_start", url=url, task=task)

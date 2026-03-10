@@ -853,17 +853,27 @@ def exec_unifi_clients() -> str:
 
 def exec_browse_page(url: str, task: str) -> str:
     """visit a URL and extract specific information via sandboxed context."""
-    from c0rtex_pinchtab import browse_and_extract
-    return browse_and_extract(url, task)
+    try:
+        from c0rtex_pinchtab import browse_and_extract
+        return browse_and_extract(url, task)
+    except requests.exceptions.ConnectionError:
+        return "web browsing requires pinchtab. install with: npm install -g pinchtab\nthen start it: pinchtab\nsee: https://pinchtab.com"
+    except Exception as e:
+        return f"web browsing error: {e}\nmake sure pinchtab is running: pinchtab"
 
 
 def exec_browse_search(query: str) -> str:
     """search the web via DuckDuckGo and return results."""
-    from c0rtex_pinchtab import browse_and_extract
-    return browse_and_extract(
-        f"https://html.duckduckgo.com/html/?q={quote(query)}",
-        "extract all search result titles, urls, and snippets. list each result on its own line.",
-    )
+    try:
+        from c0rtex_pinchtab import browse_and_extract
+        return browse_and_extract(
+            f"https://html.duckduckgo.com/html/?q={quote(query)}",
+            "extract all search result titles, urls, and snippets. list each result on its own line.",
+        )
+    except requests.exceptions.ConnectionError:
+        return "web browsing requires pinchtab. install with: npm install -g pinchtab\nthen start it: pinchtab\nsee: https://pinchtab.com"
+    except Exception as e:
+        return f"web browsing error: {e}\nmake sure pinchtab is running: pinchtab"
 
 
 # ── tool schema ───────────────────────────────────────────────────────────────

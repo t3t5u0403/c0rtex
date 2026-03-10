@@ -93,6 +93,24 @@ def setup_wizard():
         placeholder.write_text("# set your base model here, then run: ollama create c0rtex -f this-file\nFROM qwen3.5:2b\n")
         print(f"  > wrote placeholder {placeholder} — edit the FROM line before creating")
 
+    # ── pinchtab (optional) ────────────────────────────────────
+    print("\n--- web browsing (optional) ---")
+    pinchtab_installed = install_pinchtab()
+
+    if pinchtab_installed:
+        start = input("  start pinchtab service now? (y/n): ").strip().lower()
+        if start == "y":
+            try:
+                subprocess.Popen(
+                    ["pinchtab"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                print("  > pinchtab running on http://localhost:9867")
+            except Exception as e:
+                print(f"  > failed to start pinchtab: {e}")
+                print("  > start it manually later with: pinchtab")
+
     # ── generate SOUL.md ──────────────────────────────────────
     print("--- generating personality file ---")
     soul = generate_soul(username, interests, work, tone)
@@ -398,9 +416,9 @@ def recommend_model(vram_gb):
     """recommend an ollama model based on available VRAM"""
     if vram_gb >= 48:
         return "qwen3.5:122b"
-    elif vram_gb >= 24:
+    elif vram_gb >= 28:
         return "qwen3.5:35b"
-    elif vram_gb >= 12:
+    elif vram_gb >= 16:
         return "qwen3.5:27b"
     elif vram_gb >= 6:
         return "qwen3.5:9b"
@@ -449,6 +467,49 @@ def offer_model_pull(model):
     except subprocess.TimeoutExpired:
         print(f"  > pull timed out. run manually: ollama pull {model}")
         return False
+
+
+def install_pinchtab():
+    """detect platform and install pinchtab using the best available method."""
+    if shutil.which("pinchtab"):
+        print("  pinchtab already installed")
+        return True
+
+    print("  web browsing requires pinchtab (https://pinchtab.com)")
+    choice = input("  install pinchtab now? (y/n): ").strip().lower()
+
+    if choice != "y":
+        print("  > skipped. install later with:")
+        print("    npm install -g pinchtab")
+        print("    OR: curl -fsSL https://pinchtab.com/install.sh | bash")
+        return False
+
+    # try npm first (cross-platform)
+    if shutil.which("npm"):
+        print("  installing via npm...")
+        result = subprocess.run(["npm", "install", "-g", "pinchtab"],
+                                capture_output=True, text=True)
+        if result.returncode == 0:
+            print("  > pinchtab installed via npm")
+            return True
+        else:
+            print(f"  > npm install failed: {result.stderr.strip()}")
+
+    # try homebrew on macOS
+    if platform.system() == "Darwin" and shutil.which("brew"):
+        print("  installing via homebrew...")
+        result = subprocess.run(["brew", "install", "pinchtab"],
+                                capture_output=True, text=True)
+        if result.returncode == 0:
+            print("  > pinchtab installed via homebrew")
+            return True
+        else:
+            print(f"  > homebrew install failed: {result.stderr.strip()}")
+
+    # fallback
+    print("  > couldn't auto-install. run manually:")
+    print("    curl -fsSL https://pinchtab.com/install.sh | bash")
+    return False
 
 
 def create_modelfile(cortex_dir, model):

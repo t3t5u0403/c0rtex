@@ -18,33 +18,34 @@ c0rtex is a modular system of python scripts that wraps ollama with tool calling
 - **single-shot mode** — pipe prompts in from cron jobs or scripts
 - **structured logging** — every event logged as ndjson, viewable in the dashboard
 
-## quickstart
+## requirements
+
+- **python 3.10+** (macOS users: `brew install python@3.11`)
+- **ollama** — local llm inference
+  - macOS: `brew install ollama`
+  - linux: `curl -fsSL https://ollama.com/install.sh | sh`
+- **(optional) [pinchtab](https://pinchtab.com)** — web browsing capabilities
+
+## installation
 
 ```bash
-# clone the repo
 git clone https://github.com/t3t5u0403/c0rtex.git
 cd c0rtex
-
-# install dependencies
-pip install -r requirements.txt --break-system-packages
-
-# make sure ollama is running
-ollama serve
-
-# pull a model (setup wizard will recommend one based on your GPU)
-ollama pull qwen3.5:9b
-
-# run the setup wizard
-python c0rtex/scripts/setup.py
+pip3 install -r requirements.txt
+python3 scripts/setup.py
 ```
+
+## quickstart
 
 the setup wizard will:
 1. ask your name and preferences to generate a personalized `SOUL.md`
 2. configure your ollama endpoint
-3. optionally set up matrix bridge and homelab integrations
-4. install scripts and templates to `~/.c0rtex/`
-5. create skeleton data files (projects, ideas, inbox, etc.)
-6. generate a complete `.env` with all integration options
+3. detect your GPU and recommend + pull the right model
+4. create a custom `c0rtex` ollama model
+5. optionally install [pinchtab](https://pinchtab.com) for web browsing
+6. optionally set up matrix bridge and homelab integrations
+7. install scripts and templates to `~/.c0rtex/`
+8. generate a complete `.env` with all integration options
 
 then start chatting:
 
@@ -95,6 +96,36 @@ python ~/.c0rtex/scripts/c0rtex_web.py
 # autonomous pondering 3x daily
 0 9,14,21 * * * python ~/.c0rtex/scripts/c0rtex_ponder.py
 ```
+
+## optional features
+
+### web browsing
+
+c0rtex can browse the web using [pinchtab](https://github.com/pinchtab/pinchtab). the setup wizard will offer to install it automatically via npm or homebrew.
+
+**manual installation (if needed):**
+
+```bash
+# via npm (recommended — cross-platform)
+npm install -g pinchtab
+
+# via homebrew (macOS)
+brew install pinchtab
+
+# via install script (macOS/linux)
+curl -fsSL https://pinchtab.com/install.sh | bash
+```
+
+**usage:**
+
+```bash
+# start pinchtab (in a separate terminal or background)
+pinchtab  # runs on http://localhost:9867
+
+# c0rtex will automatically use it for web browsing
+```
+
+if pinchtab isn't running, web browsing tools will fail gracefully with installation instructions.
 
 ## architecture
 
@@ -163,20 +194,6 @@ the web dashboard at `http://127.0.0.1:5000` provides:
 - **signal** — signal bridge status and message history
 - **oura** — health data and oauth2 connection management
 
-## dependencies
-
-see `requirements.txt`. install with:
-
-```bash
-pip install -r requirements.txt --break-system-packages
-```
-
-## requirements
-
-- python 3.10+ (macOS users: `brew install python@3.11`)
-- ollama running locally
-- a gpu with enough vram for your chosen model (or cpu inference if you're patient)
-
 ## configuration
 
 after running `setup.py`, edit `~/.c0rtex/.env` to add more integrations. see `.env.example` for all available options.
@@ -189,10 +206,6 @@ models are configured per-script at the top of each file. the defaults are:
 - same model for briefings and deadline analysis (extended thinking)
 
 swap these for whatever fits your hardware.
-
-## third-party components
-
-- `scripts/pinchtab/` — vendored from [pinchtab/pinchtab](https://github.com/pinchtab/pinchtab) (MIT License)
 
 ## license
 
