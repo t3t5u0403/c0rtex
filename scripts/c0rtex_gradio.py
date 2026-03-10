@@ -35,11 +35,9 @@ def chat_with_c0rtex(message, history):
     # Build messages for Ollama
     messages = [{"role": "system", "content": SOUL}]
 
-    # Add history
-    for user_msg, bot_msg in history:
-        messages.append({"role": "user", "content": user_msg})
-        if bot_msg:
-            messages.append({"role": "assistant", "content": bot_msg})
+    # Add history (Gradio 4+ passes list of {"role": ..., "content": ...} dicts)
+    for entry in history:
+        messages.append({"role": entry["role"], "content": entry["content"]})
 
     # Add current message
     messages.append({"role": "user", "content": message})
