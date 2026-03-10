@@ -81,7 +81,7 @@ def chat_with_c0rtex(message, history):
                 tool_name = tool_call.get("function", {}).get("name")
                 tool_args = tool_call.get("function", {}).get("arguments", {})
 
-                log.event("tool_call", name=tool_name, args=tool_args)
+                log.event("tool_call", tool_name=tool_name, tool_args=tool_args)
                 result = execute_tool(tool_name, tool_args)
                 results.append(f"[tool: {tool_name}]\n{result}")
 
