@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>c0rtex</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-idle: #0a0a12;
+    --bg-active: #0a1020;
+    --bg-threat: #1a0808;
+    --accent-idle: #00ffaa;
+    --accent-active: #ff9500;
+    --accent-threat: #ff2040;
+    --accent: var(--accent-idle);
+    --glow: 0 0 30px var(--accent);
+    --glow-strong: 0 0 40px var(--accent), 0 0 80px var(--accent);
+  }
+
+  body {
+    background: var(--bg-idle);
+    color: #e0e0e0;
+    font-family: 'Share Tech Mono', monospace;
+    width: 600px;
+    height: 1024px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .bezel-ring {
+    position: absolute;
+    top: 3px; left: 3px; right: 3px; bottom: 3px;
+    border-radius: 6px;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .bezel-ring svg { width: 100%; height: 100%; }
+  .bezel-track { fill: none; stroke: #1a1a2e; stroke-width: 3; }
+  .bezel-fill {
+    fill: none; stroke: var(--accent); stroke-width: 3;
+    filter: drop-shadow(0 0 4px var(--accent));
+    transition: stroke-dashoffset 1s ease, stroke 0.5s ease;
+  }
+
+  .scanlines {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+    pointer-events: none; z-index: 20;
+  }
+
+  .container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    z-index: 5;
+  }
+
+  /* ===== TOP BAR ===== */
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 18px;
+    flex-shrink: 0;
+    border-bottom: 1px solid #1a1a2e;
+  }
+  .status-label {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900; font-size: 20px;
+    letter-spacing: 4px; text-transform: uppercase;
+    color: var(--accent);
+    text-shadow: var(--glow);
+    transition: color 0.5s, text-shadow 0.5s;
+  }
+  .top-right {
+    display: flex; flex-direction: column;
+    align-items: flex-end; gap: 2px;
+  }
+  .model-tag { font-size: 11px; color: #445; letter-spacing: 2px; }
+  .uptime-tag { font-size: 10px; color: #3a3a4e; letter-spacing: 1px; }
+
+  /* ===== FACE ===== */
+  .face-section {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+    position: relative;
+  }
+
+  .face-wrapper {
+    position: relative;
+    transition: filter 0.3s ease;
+  }
+  .face-wrapper.pixelated { filter: url(#pixelate); }
+  .face-wrapper.breathing { animation: breathe 4s ease-in-out infinite; }
+  .face-wrapper.working-anim { animation: working-pulse 1.5s ease-in-out infinite; }
+  .face-wrapper.threat-anim { animation: threat-flash 0.5s ease-in-out infinite; }
+
+  @keyframes breathe {
+    0%, 100% { opacity: 0.85; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.03); }
+  }
+  @keyframes working-pulse {
+    0%, 100% { opacity: 0.9; }
+    50% { opacity: 1; }
+  }
+  @keyframes threat-flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .face-canvas {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    text-shadow: var(--glow-strong);
+    transition: color 0.5s ease, text-shadow 0.5s ease;
+    user-select: none;
+    line-height: 1;
+  }
+
+  .face-bracket {
+    font-size: 150px;
+    opacity: 0.7;
+    display: inline-block;
+    transition: opacity 0.15s ease;
+  }
+
+  .eye-socket {
+    display: inline-block;
+    position: relative;
+    width: 75px;
+    height: 110px;
+    overflow: hidden;
+  }
+
+  .eye {
+    font-size: 100px;
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    transition: transform 0.35s ease, opacity 0.06s ease;
+    line-height: 1;
+  }
+  .eye.blink {
+    transform: translate(-50%, -50%) scaleY(0.05) !important;
+    transition: transform 0.06s ease-in !important;
+  }
+
+  .face-mouth {
+    font-size: 100px;
+    display: inline-block;
+    transition: transform 0.3s ease;
+    margin: 0 2px;
+    position: relative;
+    top: 6px;
+  }
+
+  .mood {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 15px; letter-spacing: 5px;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-shadow: var(--glow);
+    text-align: center;
+    transition: color 0.5s, text-shadow 0.5s;
+    margin-top: 8px;
+  }
+
+  /* ===== SECONDARY INFO ROW ===== */
+  .info-strip {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    padding: 16px 18px;
+    flex-shrink: 0;
+    border-top: 1px solid #1a1a2e;
+    border-bottom: 1px solid #1a1a2e;
+  }
+  .info-item {
+    font-size: 16px;
+    color: #889;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 400;
+  }
+  .info-item span {
+    color: var(--accent);
+    text-shadow: 0 0 6px var(--accent);
+    transition: color 0.5s, text-shadow 0.5s;
+  }
+
+  /* ===== GPU BAR ===== */
+  .gpu-section { padding: 10px 18px 6px; flex-shrink: 0; }
+  .gpu-bar-label {
+    display: flex; justify-content: space-between;
+    align-items: baseline; margin-bottom: 6px;
+  }
+  .gpu-bar-label-text {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px; letter-spacing: 3px;
+    text-transform: uppercase; color: #556;
+  }
+  .gpu-bar-pct {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 20px; font-weight: 700;
+    color: var(--accent);
+    text-shadow: 0 0 10px var(--accent);
+    transition: color 0.5s, text-shadow 0.5s;
+  }
+  .gpu-bar-track {
+    height: 10px; background: #0d0d18;
+    border-radius: 5px; overflow: hidden;
+    border: 1px solid #1a1a2e;
+  }
+  .gpu-bar-fill {
+    height: 100%; width: 0%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+    border-radius: 4px;
+    transition: width 1s ease, background 0.5s ease;
+  }
+
+  /* ===== VRAM BAR ===== */
+  .vram-section { padding: 4px 18px 8px; flex-shrink: 0; }
+  .vram-bar-label {
+    display: flex; justify-content: space-between;
+    align-items: baseline; margin-bottom: 6px;
+  }
+  .vram-bar-label-text {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px; letter-spacing: 3px;
+    text-transform: uppercase; color: #556;
+  }
+  .vram-bar-val {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 18px; font-weight: 700;
+    color: var(--accent);
+    text-shadow: 0 0 10px var(--accent);
+    transition: color 0.5s, text-shadow 0.5s;
+  }
+  .vram-bar-track {
+    height: 10px; background: #0d0d18;
+    border-radius: 5px; overflow: hidden;
+    border: 1px solid #1a1a2e;
+  }
+  .vram-bar-fill {
+    height: 100%; width: 0%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+    border-radius: 4px;
+    transition: width 1s ease, background 0.5s ease;
+    opacity: 0.7;
+  }
+
+  /* ===== BIG STATS ===== */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    flex: 1;
+    min-height: 0;
+  }
+  .stat {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #1a1a2e;
+    padding: 2px 16px;
+    overflow: hidden;
+  }
+  .stat:nth-child(odd) { border-right: 1px solid #1a1a2e; }
+  .stat:nth-child(n+7) { border-bottom: none; }
+  .stat-label {
+    font-size: 14px; letter-spacing: 3px;
+    text-transform: uppercase; color: #889;
+    font-family: 'Orbitron', sans-serif;
+    flex-shrink: 0;
+  }
+  .stat-value-row { display: flex; align-items: baseline; gap: 2px; }
+  .stat-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 52px; font-weight: 900;
+    color: var(--accent);
+    text-shadow: 0 0 20px var(--accent);
+    transition: color 0.5s, text-shadow 0.5s;
+    line-height: 1;
+  }
+  .stat-unit { font-size: 18px; color: #667; }
+
+  /* ===== BOTTOM TICKER ===== */
+  .ticker {
+    flex-shrink: 0;
+    padding: 6px 18px;
+    border-top: 1px solid #1a1a2e;
+    font-size: 13px;
+    color: #667;
+    letter-spacing: 1px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .ticker-msg {
+    color: #556;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    max-width: 70%;
+  }
+  .ticker-ts { color: #445; }
+
+  /* ===== ALERT ===== */
+  .alert-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255, 20, 40, 0.08);
+    border: 2px solid var(--accent-threat);
+    border-radius: 6px;
+    display: flex; align-items: flex-start;
+    justify-content: center; padding-top: 50px;
+    z-index: 15; opacity: 0; pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .alert-overlay.active { opacity: 1; animation: alert-pulse 1s ease-in-out infinite; }
+  @keyframes alert-pulse {
+    0%, 100% { background: rgba(255, 20, 40, 0.05); }
+    50% { background: rgba(255, 20, 40, 0.12); }
+  }
+  .alert-text {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 16px; color: var(--accent-threat);
+    letter-spacing: 4px; text-transform: uppercase;
+    text-shadow: 0 0 20px var(--accent-threat);
+  }
+
+  @keyframes glitch-shake {
+    0%   { transform: translate(0) skewX(0); }
+    15%  { transform: translate(-4px, 2px) skewX(-2deg); }
+    30%  { transform: translate(4px, -1px) skewX(1deg); }
+    45%  { transform: translate(-2px, -3px) skewX(3deg); }
+    60%  { transform: translate(3px, 2px) skewX(-1deg); }
+    75%  { transform: translate(-3px, 0) skewX(-2deg); }
+    100% { transform: translate(0) skewX(0); }
+  }
+  .glitch-shake { animation: glitch-shake 0.2s ease-in-out; }
+
+  @keyframes color-split {
+    0%   { text-shadow: var(--glow-strong); }
+    25%  { text-shadow: -3px 0 #ff0040, 3px 0 #00ffaa, var(--glow-strong); }
+    50%  { text-shadow: 2px 0 #ff0040, -2px 0 #4040ff, var(--glow-strong); }
+    75%  { text-shadow: -1px 0 #00ffaa, 1px 0 #ff0040, var(--glow-strong); }
+    100% { text-shadow: var(--glow-strong); }
+  }
+  .color-split { animation: color-split 0.15s ease-in-out; }
+
+  .bg-glow {
+    position: absolute; top: 35%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 500px; height: 500px; border-radius: 50%;
+    background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+    opacity: 0.05; filter: blur(80px);
+    pointer-events: none;
+    transition: background 1s ease, opacity 1s ease;
+    z-index: 1;
+  }
+</style>
+</head>
+<body>
+
+<svg style="position:absolute;width:0;height:0">
+  <defs>
+    <filter id="pixelate" x="0" y="0" width="100%" height="100%">
+      <feFlood x="2" y="2" height="1" width="1"/>
+      <feComposite width="10" height="10"/>
+      <feTile result="a"/>
+      <feComposite in="SourceGraphic" in2="a" operator="in"/>
+      <feMorphology operator="dilate" radius="5"/>
+    </filter>
+  </defs>
+</svg>
+
+<div class="bg-glow"></div>
+
+<div class="bezel-ring">
+  <svg viewBox="0 0 594 1018" preserveAspectRatio="none">
+    <rect class="bezel-track" x="2" y="2" width="590" height="1014" rx="5"/>
+    <rect class="bezel-fill" id="bezelFill" x="2" y="2" width="590" height="1014" rx="5"
+          stroke-dasharray="3208" stroke-dashoffset="3208"/>
+  </svg>
+</div>
+
+<div class="scanlines"></div>
+
+<div class="alert-overlay" id="alertOverlay">
+  <div class="alert-text" id="alertText">CONNECTION LOST</div>
+</div>
+
+<div class="container">
+
+  <div class="top-bar">
+    <span class="status-label" id="statusLabel">IDLE</span>
+    <div class="top-right">
+      <span class="model-tag" id="modelTag">-- · rtx 3090</span>
+      <span class="uptime-tag" id="uptimeTag">up 0h</span>
+    </div>
+  </div>
+
+  <div class="face-section">
+    <div class="face-wrapper breathing" id="faceWrapper">
+      <div class="face-canvas" id="faceCanvas">
+        <span class="face-bracket" id="bracketL">(</span>
+        <span class="eye-socket"><span class="eye" id="eyeL">•</span></span>
+        <span class="face-mouth" id="mouth">‿</span>
+        <span class="eye-socket"><span class="eye" id="eyeR">•</span></span>
+        <span class="face-bracket" id="bracketR">)</span>
+      </div>
+    </div>
+    <div class="mood" id="mood">connecting...</div>
+  </div>
+
+  <div class="info-strip">
+    <span class="info-item">ctx: <span id="ctxPct">0%</span></span>
+    <span class="info-item">ips: <span id="ipsCount">0</span> events</span>
+    <span class="info-item">tok/s: <span id="toksInline">--</span></span>
+  </div>
+
+  <div class="gpu-section">
+    <div class="gpu-bar-label">
+      <span class="gpu-bar-label-text">GPU Utilization</span>
+      <span class="gpu-bar-pct" id="gpuBarPct">0%</span>
+    </div>
+    <div class="gpu-bar-track">
+      <div class="gpu-bar-fill" id="gpuBar"></div>
+    </div>
+  </div>
+
+  <div class="vram-section">
+    <div class="vram-bar-label">
+      <span class="vram-bar-label-text">VRAM</span>
+      <span class="vram-bar-val" id="vramBarVal">0 / 24 GB</span>
+    </div>
+    <div class="vram-bar-track">
+      <div class="vram-bar-fill" id="vramBar"></div>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat">
+      <span class="stat-label">GPU</span>
+      <div class="stat-value-row">
+        <span class="stat-value" id="gpuVal">0</span><span class="stat-unit">%</span>
+      </div>
+    </div>
+    <div class="stat">
+      <span class="stat-label">VRAM</span>
+      <div class="stat-value-row">
+        <span class="stat-value" id="vramVal">0</span><span class="stat-unit">GB</span>
+      </div>
+    </div>
+    <div class="stat">
+      <span class="stat-label">TEMP</span>
+      <div class="stat-value-row">
+        <span class="stat-value" id="tempVal">0</span><span class="stat-unit">°C</span>
+      </div>
+    </div>
+    <div class="stat">
+      <span class="stat-label">POWER</span>
+      <div class="stat-value-row">
+        <span class="stat-value" id="powerVal">0</span><span class="stat-unit">W</span>
+      </div>
+    </div>
+    <div class="stat">
+      <span class="stat-label">TOK/S</span>
+      <div class="stat-value-row">
+        <span class="stat-value" id="toksVal">--</span>
+      </div>
+    </div>
+    <div class="stat">
+      <span class="stat-label">CTX</span>
+      <div class="stat-value-row">
+        <span class="stat-value" id="ctxVal">0</span><span class="stat-unit">%</span>
+      </div>
+    </div>
+    <div class="stat">
+      <span class="stat-label">IPS</span>
+      <div class="stat-value-row">
+        <span class="stat-value" id="ipsVal">0</span><span class="stat-unit">evt</span>
+      </div>
+    </div>
+    <div class="stat">
+      <span class="stat-label">DISK</span>
+      <div class="stat-value-row">
+        <span class="stat-value" id="diskVal">0</span><span class="stat-unit">%</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="ticker">
+    <span class="ticker-msg" id="tickerMsg">c0rtex online · connecting...</span>
+    <span class="ticker-ts" id="tickerTs"></span>
+  </div>
+
+</div>
+
+<script>
+const eyeChars = {
+  idle:'•', sleeping:'–', thinking:'◉', working:'◉',
+  ready:'•', stressed:'×', happy:'◕', alert:'⊙', threat:'▀̿',
+};
+const mouthChars = {
+  idle:'‿', sleeping:'‿', thinking:'_', working:'_',
+  ready:'‿', stressed:'﹏', happy:'‿', alert:'△', threat:'▃',
+};
+const mouthAlts = {
+  idle:['‿','‿','⌣','‿'], sleeping:['‿','∼','‿'],
+  thinking:['_','⎽','_','╌'], working:['_','⎽','╌','_'],
+  ready:['‿','‿','⌣','‿'],
+  stressed:['﹏','∿','﹏','⌢'], happy:['‿','◡','‿','⌣'],
+  alert:['△','_','△'], threat:['▃','_','▃'],
+};
+const moods = {
+  idle:['all systems nominal','vibing','signal clear'],
+  ready:['model loaded','waiting for input','standing by','ready'],
+  thinking:['processing','crunching tokens','thinking'],
+  working:['deep inference','generating','neurons firing'],
+  stressed:['running hot','thermal limit'],
+  happy:['task complete','nailed it','clean run'],
+  alert:['connection lost','backend unreachable','retrying'],
+};
+const tickerMsgs = {
+  idle:['c0rtex online · all systems nominal','idle loop active'],
+  ready:['model in vram · awaiting instructions','ready for queries'],
+  thinking:['processing query · allocating attention','model inference active'],
+  working:['generating response · gpu engaged','token stream active'],
+  stressed:['warning: thermal throttle imminent','gpu temp critical'],
+  happy:['response delivered successfully','task completed · returning to idle'],
+  alert:['connection lost · retrying','backend unreachable'],
+};
+
+const $ = id => document.getElementById(id);
+const el = {
+  fw:$('faceWrapper'), fc:$('faceCanvas'),
+  eL:$('eyeL'), eR:$('eyeR'), mouth:$('mouth'),
+  bL:$('bracketL'), bR:$('bracketR'),
+  mood:$('mood'), status:$('statusLabel'),
+  modelTag:$('modelTag'),
+  gpuVal:$('gpuVal'), vramVal:$('vramVal'), tempVal:$('tempVal'),
+  powerVal:$('powerVal'), toksVal:$('toksVal'), ctxVal:$('ctxVal'),
+  ipsVal:$('ipsVal'), diskVal:$('diskVal'),
+  gpuBar:$('gpuBar'), gpuPct:$('gpuBarPct'),
+  vramBar:$('vramBar'), vramBarVal:$('vramBarVal'),
+  bezel:$('bezelFill'), alert:$('alertOverlay'),
+  alertText:$('alertText'),
+  ctxPct:$('ctxPct'), ipsCount:$('ipsCount'), toksInline:$('toksInline'),
+  uptimeTag:$('uptimeTag'),
+  tickerMsg:$('tickerMsg'), tickerTs:$('tickerTs'),
+};
+
+const BEZEL_P = 3208;
+const VRAM_TOTAL = 24;
+
+let S = {
+  gpu:0, vram:0, temp:0, toks:0, power:0, disk:0,
+  ctx:0, ips:0, uptime:0,
+  mode:'idle', threat:false, connected:false,
+};
+
+// ===== EYES =====
+let eyeTX=0, eyeTY=0, eyeX=0, eyeY=0;
+let lastLook=0, lookWait=2000;
+let blinking=false, nextBlink=now()+rand(3000,7000);
+
+function now(){return Date.now()}
+function rand(a,b){return a+Math.random()*(b-a)}
+
+function pickLook(){
+  if(S.mode==='threat'||S.mode==='alert'){
+    eyeTX=rand(-1,1); eyeTY=rand(-0.7,0.7); lookWait=rand(300,800);
+  } else if(S.mode==='stressed'){
+    eyeTX=rand(-0.8,0.8); eyeTY=rand(-0.5,0.5); lookWait=rand(500,1200);
+  } else if(S.mode==='working'||S.mode==='thinking'){
+    // focused — small slow movements, slightly downward (reading)
+    eyeTX=rand(-0.3,0.3); eyeTY=rand(-0.1,0.3); lookWait=rand(2000,4000);
+  } else if(S.mode==='sleeping'){
+    eyeTX=0; eyeTY=0.2; lookWait=5000;
+  } else if(S.mode==='ready'){
+    // attentive — gentle wandering
+    eyeTX=rand(-0.5,0.5); eyeTY=rand(-0.3,0.3); lookWait=rand(2000,5000);
+  } else {
+    eyeTX=rand(-0.8,0.8); eyeTY=rand(-0.5,0.5); lookWait=rand(1500,4000);
+  }
+  lastLook=now();
+}
+
+function tickEyes(){
+  if(now()-lastLook>lookWait)pickLook();
+  const sp=S.mode==='threat'?0.18:0.07;
+  eyeX+=(eyeTX-eyeX)*sp;
+  eyeY+=(eyeTY-eyeY)*sp;
+  if(!blinking){
+    const tx=eyeX*16, ty=eyeY*8;
+    el.eL.style.transform=`translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px))`;
+    el.eR.style.transform=`translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px))`;
+  }
+}
+
+function tickBlink(){
+  if(S.mode==='sleeping'||now()<nextBlink)return;
+  blinking=true;
+  el.eL.classList.add('blink'); el.eR.classList.add('blink');
+  const dbl=Math.random()<0.25;
+  setTimeout(()=>{
+    el.eL.classList.remove('blink'); el.eR.classList.remove('blink');
+    if(dbl){
+      setTimeout(()=>{
+        el.eL.classList.add('blink'); el.eR.classList.add('blink');
+        setTimeout(()=>{
+          el.eL.classList.remove('blink'); el.eR.classList.remove('blink');
+          blinking=false;
+        },70);
+      },100);
+    } else blinking=false;
+  },90+Math.random()*50);
+  const base=S.mode==='stressed'?1200:2500;
+  nextBlink=now()+rand(base,base+4000);
+}
+
+let mouthTick=0, mouthIdx=0;
+function tickMouth(){
+  mouthTick++;
+  const rate=(S.mode==='stressed'||S.mode==='threat')?5:10;
+  if(mouthTick%rate===0){
+    const alts=mouthAlts[S.mode]||mouthAlts.idle;
+    mouthIdx=(mouthIdx+1)%alts.length;
+    el.mouth.textContent=alts[mouthIdx];
+  }
+}
+
+let pxActive=false;
+function tickPixel(){
+  if(S.gpu>85&&!pxActive){pxActive=true;el.fw.classList.add('pixelated')}
+  else if(S.gpu<=85&&pxActive){pxActive=false;el.fw.classList.remove('pixelated')}
+}
+
+function glitch(){
+  el.fc.classList.add('glitch-shake','color-split');
+  const b=Math.random()<0.5?el.bL:el.bR;
+  b.style.opacity='0.15';
+  setTimeout(()=>{
+    el.fc.classList.remove('glitch-shake','color-split');
+    b.style.opacity='0.7';
+  },200);
+}
+
+function stressGlitch(){
+  glitch();
+  const off=rand(-20,20);
+  el.eL.style.transition='none';
+  el.eL.style.transform=`translate(calc(-50% + ${off}px), calc(-50% + ${rand(-10,10)}px))`;
+  setTimeout(()=>{el.eL.style.transition='transform 0.35s ease'},160);
+}
+
+let lastMode = null;
+
+function setMode(mode){
+  S.mode=mode;
+  const r=document.documentElement;
+  el.fw.className='face-wrapper';
+  if(mode==='idle'||mode==='sleeping'){
+    r.style.setProperty('--accent','var(--accent-idle)');
+    document.body.style.background='var(--bg-idle)';
+    el.fw.classList.add('breathing');
+  } else if(mode==='ready'){
+    r.style.setProperty('--accent','#00ccff');
+    document.body.style.background='#0a0a18';
+    el.fw.classList.add('breathing');
+  } else if(mode==='thinking'){
+    r.style.setProperty('--accent','var(--accent-active)');
+    document.body.style.background='var(--bg-active)';
+    el.fw.classList.add('working-anim');
+  } else if(mode==='working'){
+    r.style.setProperty('--accent','#ffbb33');
+    document.body.style.background='var(--bg-active)';
+    el.fw.classList.add('working-anim');
+  } else if(mode==='stressed'){
+    r.style.setProperty('--accent','#ff5050');
+    document.body.style.background='#120808';
+    el.fw.classList.add('threat-anim');
+  } else if(mode==='happy'){
+    r.style.setProperty('--accent','#00ffaa');
+    document.body.style.background='var(--bg-idle)';
+    el.fw.classList.add('breathing');
+  } else if(mode==='alert'||mode==='threat'){
+    r.style.setProperty('--accent','var(--accent-threat)');
+    document.body.style.background='var(--bg-threat)';
+    el.fw.classList.add('threat-anim');
+  }
+  el.eL.textContent=eyeChars[mode]||eyeChars.idle;
+  el.eR.textContent=eyeChars[mode]||eyeChars.idle;
+  mouthIdx=0;
+  el.mouth.textContent=mouthChars[mode]||mouthChars.idle;
+  el.status.textContent=mode.toUpperCase();
+
+  // only update mood/ticker text on mode change
+  if(mode !== lastMode){
+    const m=moods[mode]||moods.idle;
+    el.mood.textContent=m[Math.floor(Math.random()*m.length)];
+    const t=tickerMsgs[mode]||tickerMsgs.idle;
+    el.tickerMsg.textContent=t[Math.floor(Math.random()*t.length)];
+    lastMode = mode;
+    pickLook();
+  }
+}
+
+function updateStats(){
+  el.gpuVal.textContent=S.gpu;
+  el.gpuPct.textContent=S.gpu+'%';
+  el.vramVal.textContent=S.vram.toFixed(1);
+  el.vramBarVal.textContent=S.vram.toFixed(1)+' / '+VRAM_TOTAL+' GB';
+  el.tempVal.textContent=S.temp;
+  el.powerVal.textContent=S.power;
+  el.toksVal.textContent=S.toks>0?S.toks.toFixed(1):'--';
+  el.toksInline.textContent=S.toks>0?S.toks.toFixed(1):'--';
+  el.ctxVal.textContent=Math.round(S.ctx*100);
+  el.ctxPct.textContent=Math.round(S.ctx*100)+'%';
+  el.ipsVal.textContent=S.ips;
+  el.ipsCount.textContent=S.ips;
+  el.diskVal.textContent=S.disk;
+  el.uptimeTag.textContent='up '+Math.floor(S.uptime)+'h';
+
+  el.gpuBar.style.width=S.gpu+'%';
+  el.vramBar.style.width=((S.vram/VRAM_TOTAL)*100)+'%';
+  el.bezel.style.strokeDashoffset=BEZEL_P*(1-S.ctx);
+  el.alert.classList.toggle('active',S.threat);
+
+  const d=new Date();
+  el.tickerTs.textContent=d.toLocaleTimeString('en-US',{hour12:false});
+}
+
+// ===== ANIMATION LOOP =====
+function frame(){
+  tickEyes(); tickBlink();
+  requestAnimationFrame(frame);
+}
+
+// ===== LIVE DATA POLLING =====
+let failCount = 0;
+
+async function pollStatus(){
+  try {
+    const resp = await fetch('/status');
+    if(!resp.ok) throw new Error(resp.status);
+    const data = await resp.json();
+
+    if(!S.connected){
+      S.connected = true;
+      S.threat = false;
+      glitch();
+    }
+    failCount = 0;
+
+    // map API response to state
+    S.gpu = data.gpu.utilization;
+    S.vram = data.gpu.vram_used;
+    S.temp = data.gpu.temperature;
+    S.power = data.gpu.power_draw;
+    S.toks = data.inference.tokens_per_sec;
+    S.ctx = data.context.fill;
+    S.ips = data.ips.total_events;
+    S.uptime = data.system.uptime_hours;
+    S.disk = data.system.disk_percent;
+
+    // update model name
+    if(data.ollama.model){
+      el.modelTag.textContent = data.ollama.model + ' · rtx 3090';
+    } else {
+      el.modelTag.textContent = 'no model · rtx 3090';
+    }
+
+    // set mood from server
+    const newMode = data.mood || 'idle';
+    if(newMode !== S.mode) glitch();
+    setMode(newMode);
+    updateStats();
+    tickMouth();
+    tickPixel();
+
+    if(S.mode==='stressed'&&Math.random()<0.15) stressGlitch();
+
+  } catch(e){
+    failCount++;
+    if(failCount >= 3 && S.connected){
+      S.connected = false;
+      S.threat = true;
+      el.alertText.textContent = 'CONNECTION LOST';
+      setMode('alert');
+      updateStats();
+    }
+  }
+}
+
+// ===== START =====
+setMode('idle');
+pickLook();
+requestAnimationFrame(frame);
+pollStatus();
+setInterval(pollStatus, 2000);
+setInterval(()=>{if(Math.random()<0.3)glitch()},12000);
+</script>
+</body>
+</html>

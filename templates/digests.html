@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}digests{% endblock %}
+
+{% block content %}
+<h1>digests ({{ files|length }})</h1>
+
+{% if files %}
+<ul class="file-list">
+  {% for name in files %}
+  <li><a href="/digests/{{ name }}">{{ name }}</a></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="dim">no digests yet. (~/.c0rtex/digests/)</p>
+{% endif %}
+{% endblock %}

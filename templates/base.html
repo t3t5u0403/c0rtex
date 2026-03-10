@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>c0rtex — {% block title %}{% endblock %}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0d0d0d; color: #c8c8c8; font-family: 'Courier New', Courier, monospace; font-size: 14px; line-height: 1.5; }
+    a { color: #7ec8e3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* nav */
+    nav { background: #151515; border-bottom: 1px solid #2a2a2a; padding: 12px 24px; display: flex; gap: 20px; align-items: center; position: sticky; top: 0; z-index: 10; }
+    .nav-brand { color: #fff; font-weight: bold; font-size: 15px; letter-spacing: 0.05em; margin-right: 8px; }
+    nav a { color: #666; font-size: 13px; }
+    nav a:hover, nav a.active { color: #c8c8c8; text-decoration: none; }
+
+    /* layout */
+    .container { max-width: 1100px; margin: 0 auto; padding: 28px 24px; }
+    h1 { color: #fff; font-size: 16px; margin-bottom: 20px; letter-spacing: 0.03em; }
+    h2 { color: #aaa; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; margin: 24px 0 12px; }
+
+    /* stat boxes */
+    .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
+    .stat-box { background: #151515; border: 1px solid #2a2a2a; border-radius: 4px; padding: 14px 20px; min-width: 120px; }
+    .stat-num { font-size: 26px; color: #fff; font-weight: bold; }
+    .stat-label { font-size: 11px; color: #555; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+    /* cards */
+    .card { background: #151515; border: 1px solid #222; border-radius: 4px; padding: 14px 16px; margin-bottom: 10px; }
+
+    /* role badges */
+    .badge { display: inline-block; padding: 1px 7px; border-radius: 3px; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 8px; vertical-align: middle; }
+    .badge-user      { background: #1a2f20; color: #5ecb7a; }
+    .badge-assistant { background: #152030; color: #6ab5d8; }
+    .badge-tool      { background: #2a1f14; color: #d4834a; }
+    .badge-system    { background: #252215; color: #c8b04a; }
+    .badge-error     { background: #2a1515; color: #d45555; }
+
+    /* messages */
+    .msg-content { margin-top: 8px; white-space: pre-wrap; word-break: break-word; color: #b0b0b0; padding-left: 4px; }
+
+    /* tables */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 7px 12px; background: #181818; color: #555; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #252525; }
+    td { padding: 7px 12px; border-bottom: 1px solid #1c1c1c; vertical-align: top; }
+    tr:hover td { background: #181818; }
+    .ts-col { white-space: nowrap; color: #444; font-size: 12px; width: 190px; }
+    .src-col { white-space: nowrap; width: 90px; }
+    .evt-col { white-space: nowrap; width: 160px; }
+
+    /* file lists */
+    .file-list { list-style: none; }
+    .file-list li { border-bottom: 1px solid #1c1c1c; }
+    .file-list li a { display: block; padding: 9px 4px; color: #999; }
+    .file-list li a:hover { color: #fff; text-decoration: none; }
+
+    /* filters */
+    .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    select, input[type="date"] { background: #151515; color: #c8c8c8; border: 1px solid #333; padding: 5px 10px; border-radius: 3px; font-family: inherit; font-size: 13px; }
+    select:focus, input:focus { outline: 1px solid #444; }
+
+    /* dim text */
+    .dim { color: #444; }
+    .info { color: #555; font-size: 12px; }
+
+    /* markdown rendering area */
+    #md-content { line-height: 1.7; color: #c0c0c0; }
+    #md-content h1, #md-content h2, #md-content h3 { color: #ddd; margin: 18px 0 8px; }
+    #md-content h1 { font-size: 16px; }
+    #md-content h2 { font-size: 14px; }
+    #md-content h3 { font-size: 13px; }
+    #md-content p { margin-bottom: 10px; }
+    #md-content ul, #md-content ol { margin: 8px 0 10px 20px; }
+    #md-content li { margin-bottom: 4px; }
+    #md-content strong { color: #e0e0e0; }
+    #md-content em { color: #aaa; }
+    #md-content code { background: #1e1e1e; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+    #md-content pre { background: #1a1a1a; border: 1px solid #252525; border-radius: 4px; padding: 12px; overflow-x: auto; margin: 10px 0; }
+    #md-content pre code { background: none; padding: 0; }
+    #md-content blockquote { border-left: 3px solid #333; padding-left: 12px; color: #777; margin: 8px 0; }
+    #md-content hr { border: none; border-top: 1px solid #252525; margin: 16px 0; }
+
+    /* tab switcher */
+    .tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 1px solid #252525; }
+    .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: #555; font-family: inherit; font-size: 13px; padding: 8px 16px; cursor: pointer; margin-bottom: -1px; }
+    .tab-btn.active { color: #c8c8c8; border-bottom-color: #7ec8e3; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* log event detail */
+    .evt-detail { color: #666; font-size: 12px; }
+    .evt-detail .key { color: #555; }
+    .evt-detail .val { color: #888; }
+  </style>
+</head>
+<body>
+  <nav>
+    <span class="nav-brand">c0rtex</span>
+    <a href="/" {% if request.endpoint == 'index' %}class="active"{% endif %}>overview</a>
+    <a href="/conversations" {% if request.endpoint == 'conversations' %}class="active"{% endif %}>conversations</a>
+    <a href="/ponderings" {% if request.endpoint in ('ponderings','pondering') %}class="active"{% endif %}>ponderings</a>
+    <a href="/digests" {% if request.endpoint in ('digests','digest') %}class="active"{% endif %}>digests</a>
+    <a href="/logs" {% if request.endpoint == 'logs' %}class="active"{% endif %}>logs</a>
+    <a href="/signal" {% if request.endpoint == 'signal' %}class="active"{% endif %}>signal</a>
+    <a href="/oura" {% if request.endpoint in ('oura','oura_connect','oura_callback') %}class="active"{% endif %}>oura</a>
+  </nav>
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

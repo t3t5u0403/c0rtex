@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}oura{% endblock %}
+{% block content %}
+<h1>oura ring</h1>
+
+{% if not configured %}
+  <div class="card">
+    <p>oura ring is not configured.</p>
+    <p class="info" style="margin-top: 8px;">
+      set <code>OURA_CLIENT_ID</code> and <code>OURA_CLIENT_SECRET</code> in <code>~/.c0rtex/.env</code>
+      then restart the dashboard.
+    </p>
+    <p class="info" style="margin-top: 8px;">
+      create an app at <a href="https://cloud.ouraring.com/oauth/applications">cloud.ouraring.com</a>
+      with redirect uri: <code>http://127.0.0.1:5000/oura/callback</code>
+    </p>
+  </div>
+
+{% elif not connected %}
+  <div class="card">
+    <p>oura ring is configured but not connected.</p>
+    <p style="margin-top: 12px;">
+      <a href="/oura/connect" style="background: #1a2f20; color: #5ecb7a; padding: 6px 16px; border-radius: 3px; font-size: 13px;">connect oura ring</a>
+    </p>
+  </div>
+
+{% else %}
+  <div class="card">
+    <p style="color: #5ecb7a;">connected</p>
+  </div>
+
+  {% if summary %}
+    <h2>latest data</h2>
+    <div class="card">
+      <pre style="white-space: pre-wrap; color: #b0b0b0; font-size: 13px;">{{ summary }}</pre>
+    </div>
+  {% else %}
+    <div class="card">
+      <p class="info">no data available yet. make sure your ring has synced with the oura app recently.</p>
+    </div>
+  {% endif %}
+{% endif %}
+
+{% endblock %}

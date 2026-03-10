@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}ponderings{% endblock %}
+
+{% block content %}
+<h1>ponderings ({{ files|length }})</h1>
+
+{% if files %}
+<ul class="file-list">
+  {% for name in files %}
+  <li><a href="/ponderings/{{ name }}">{{ name }}</a></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="dim">no pondering sessions yet. (~/.c0rtex/ponderings/)</p>
+{% endif %}
+{% endblock %}

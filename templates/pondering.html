@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:16px;">
+  <a href="/ponderings" style="color:#555;font-size:12px;">← ponderings</a>
+</div>
+<h1>{{ name }}</h1>
+<div class="card" style="margin-top:16px;">
+  <div id="md-content">loading...</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+const raw = {{ content | tojson }};
+document.getElementById('md-content').innerHTML = marked.parse(raw);
+</script>
+{% endblock %}

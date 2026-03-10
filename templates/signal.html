@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}signal bridge{% endblock %}
+
+{% block content %}
+<h1>signal bridge</h1>
+
+<div class="stats">
+  <div class="stat-box">
+    <div class="stat-num" style="color: {{ '#5ecb7a' if enabled else '#d45555' }};">{{ 'on' if enabled else 'off' }}</div>
+    <div class="stat-label">status</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-num">{{ message_count }}</div>
+    <div class="stat-label">messages</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-num" style="font-size: 16px;">{{ target_name or '—' }}</div>
+    <div class="stat-label">target</div>
+  </div>
+</div>
+
+<h2>recent conversation</h2>
+
+{% if recent %}
+  {% for msg in recent %}
+  {% set role = msg.get('role', 'unknown') %}
+  <div class="card">
+    <div>
+      {% if role == 'user' %}
+        <span class="badge badge-user">{{ target_name or 'them' }}</span>
+      {% elif role == 'assistant' %}
+        <span class="badge badge-assistant">you</span>
+      {% else %}
+        <span class="badge">{{ role }}</span>
+      {% endif %}
+    </div>
+    {% if msg.get('content') %}
+    <div class="msg-content">{{ msg.content }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="dim">no signal history yet.</p>
+{% endif %}
+{% endblock %}

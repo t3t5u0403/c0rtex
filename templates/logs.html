@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}logs{% endblock %}
+
+{% block content %}
+<h1>logs</h1>
+
+<div class="filters">
+  <label style="color:#555;font-size:12px;">date:</label>
+  <select id="date-sel" onchange="loadLogs()">
+    {% for d in available_dates %}
+    <option value="{{ d }}" {% if d == selected_date %}selected{% endif %}>{{ d }}</option>
+    {% endfor %}
+    {% if not available_dates %}
+    <option value="{{ selected_date }}" selected>{{ selected_date }}</option>
+    {% endif %}
+  </select>
+
+  <label style="color:#555;font-size:12px;">source:</label>
+  <select id="source-sel" onchange="loadLogs()">
+    <option value="">all</option>
+    <option value="c0rtex">c0rtex</option>
+    <option value="matrix">matrix</option>
+    <option value="ponder">ponder</option>
+    <option value="digest">digest</option>
+    <option value="briefing">briefing</option>
+    <option value="deadlines">deadlines</option>
+    <option value="cron">cron</option>
+  </select>
+
+  <label style="color:#555;font-size:12px;">event:</label>
+  <select id="event-sel" onchange="loadLogs()">
+    <option value="">all</option>
+    <option value="session_start">session_start</option>
+    <option value="session_end">session_end</option>
+    <option value="ollama_request">ollama_request</option>
+    <option value="ollama_response">ollama_response</option>
+    <option value="tool_call">tool_call</option>
+    <option value="tool_result">tool_result</option>
+    <option value="error">error</option>
+    <option value="system_event">system_event</option>
+    <option value="matrix_message_in">matrix_message_in</option>
+    <option value="matrix_message_out">matrix_message_out</option>
+  </select>
+
+  <span id="log-count" class="info"></span>
+</div>
+
+<table id="log-table">
+  <thead>
+    <tr><th style="width:160px;">time</th><th style="width:90px;">source</th><th style="width:160px;">event</th><th>detail</th></tr>
+  </thead>
+  <tbody id="log-body">
+    <tr><td colspan="4" class="dim" style="padding:16px;">loading...</td></tr>
+  </tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function fmtDetail(e) {
+  const ev = e.event || '';
+  if (ev === 'ollama_request') {
+    let d = `${e.model} · ${e.message_count} msg${e.message_count !== 1 ? 's' : ''}`;
+    if (e.tools) d += ' · tools';
+    if (e.think) d += ' · thinking';
+    if (e.last_user_message) d += ` · <span style="color:#888">"${esc(e.last_user_message.slice(0, 80))}${e.last_user_message.length > 80 ? '…' : ''}"</span>`;
+    return d;
+  }
+  if (ev === 'ollama_response') {
+    let d = `${e.model} · ${e.duration_ms}ms`;
+    if (e.tool_call_names && e.tool_call_names.length) d += ` · tools: ${e.tool_call_names.join(', ')}`;
+    if (e.content) d += ` · <span style="color:#888">"${esc(e.content.slice(0, 80))}${e.content.length > 80 ? '…' : ''}"</span>`;
+    return d;
+  }
+  if (ev === 'tool_call') {
+    const args = e.args ? JSON.stringify(e.args).slice(0, 80) : '';
+    return `<span style="color:#d4834a">${esc(e.name)}</span>${args ? ' · ' + esc(args) : ''}`;
+  }
+  if (ev === 'tool_result') {
+    return `${esc(e.name)} · ${e.duration_ms}ms · <span style="color:#888">${esc((e.result||'').slice(0, 80))}</span>`;
+  }
+  if (ev === 'error') {
+    return `<span style="color:#d45555">${esc(e.error_type)}</span>: ${esc(e.message)}`;
+  }
+  if (ev === 'matrix_message_in' || ev === 'matrix_message_out') {
+    const c = e.content || '';
+    return `<span style="color:#888">"${esc(c.slice(0, 100))}${c.length > 100 ? '…' : ''}"</span>`;
+  }
+  if (ev === 'system_event') {
+    let d = esc(e.name || '');
+    if (e.session_file !== undefined) d += ` · ${e.new_ideas} new idea(s)`;
+    if (e.count !== undefined) d += ` · ${e.count} articles`;
+    if (e.new !== undefined) d += ` · ${e.new} new, ${e.skipped} skipped`;
+    return d;
+  }
+  if (ev === 'session_start') {
+    return e.mode ? `mode: ${esc(e.mode)}` : '';
+  }
+  return '';
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function evtColor(ev) {
+  if (ev === 'error') return '#d45555';
+  if (ev === 'session_start') return '#5ecb7a';
+  if (ev === 'session_end') return '#444';
+  if (ev === 'tool_call' || ev === 'tool_result') return '#d4834a';
+  if (ev && ev.includes('ollama')) return '#6ab5d8';
+  if (ev && ev.includes('matrix')) return '#9b7cd4';
+  return '#888';
+}
+
+function loadLogs() {
+  const date = document.getElementById('date-sel').value;
+  const source = document.getElementById('source-sel').value;
+  const event = document.getElementById('event-sel').value;
+
+  let url = `/api/logs?date=${date}`;
+  if (source) url += `&source=${source}`;
+  if (event) url += `&event=${event}`;
+
+  fetch(url)
+    .then(r => r.json())
+    .then(entries => {
+      const tbody = document.getElementById('log-body');
+      document.getElementById('log-count').textContent = `${entries.length} entries`;
+
+      if (!entries.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="dim" style="padding:16px;">no entries found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = entries.map(e => {
+        const ts = (e.ts || '').slice(11, 23);
+        const ev = e.event || '';
+        return `<tr>
+          <td class="ts-col">${esc(ts)}</td>
+          <td class="src-col" style="color:#555">${esc(e.source || '')}</td>
+          <td class="evt-col"><span style="color:${evtColor(ev)}">${esc(ev)}</span></td>
+          <td class="evt-detail">${fmtDetail(e)}</td>
+        </tr>`;
+      }).join('');
+    })
+    .catch(err => {
+      document.getElementById('log-body').innerHTML =
+        `<tr><td colspan="4" style="color:#d45555;padding:16px;">error loading logs: ${esc(String(err))}</td></tr>`;
+    });
+}
+
+// initial load
+loadLogs();
+</script>
+{% endblock %}

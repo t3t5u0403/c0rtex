@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}overview{% endblock %}
+
+{% block content %}
+<h1>overview — {{ today }}</h1>
+
+<div class="stats">
+  {% for src, count in sessions.items() %}
+  <div class="stat-box">
+    <div class="stat-num">{{ count }}</div>
+    <div class="stat-label">{{ src }} session{{ 's' if count != 1 }}</div>
+  </div>
+  {% endfor %}
+  <div class="stat-box">
+    <div class="stat-num">{{ ollama_calls }}</div>
+    <div class="stat-label">ollama calls</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-num">{{ tool_calls }}</div>
+    <div class="stat-label">tool calls</div>
+  </div>
+  {% if errors > 0 %}
+  <div class="stat-box" style="border-color:#3a1a1a;">
+    <div class="stat-num" style="color:#d45555;">{{ errors }}</div>
+    <div class="stat-label">errors</div>
+  </div>
+  {% endif %}
+  {% if not sessions %}
+  <div class="stat-box">
+    <div class="stat-num" style="color:#444;">—</div>
+    <div class="stat-label">no sessions today</div>
+  </div>
+  {% endif %}
+</div>
+
+<div style="display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap;">
+  {% if last_pondering %}
+  <div class="card" style="flex:1;min-width:200px;">
+    <div class="info">last pondering</div>
+    <div style="margin-top:6px;"><a href="/ponderings/{{ last_pondering }}">{{ last_pondering }}</a></div>
+  </div>
+  {% endif %}
+  {% if last_digest %}
+  <div class="card" style="flex:1;min-width:200px;">
+    <div class="info">last digest</div>
+    <div style="margin-top:6px;"><a href="/digests/{{ last_digest }}">{{ last_digest }}</a></div>
+  </div>
+  {% endif %}
+</div>
+
+<h2>recent activity</h2>
+{% if recent %}
+<table>
+  <thead>
+    <tr><th>time</th><th>source</th><th>event</th><th>detail</th></tr>
+  </thead>
+  <tbody>
+    {% for e in recent %}
+    <tr>
+      <td class="ts-col">{{ e.ts[11:19] if e.ts else '—' }}</td>
+      <td class="src-col"><span class="dim">{{ e.source }}</span></td>
+      <td class="evt-col">
+        {% if e.event == 'error' %}
+          <span style="color:#d45555;">{{ e.event }}</span>
+        {% elif e.event == 'session_start' %}
+          <span style="color:#5ecb7a;">{{ e.event }}</span>
+        {% elif e.event == 'session_end' %}
+          <span style="color:#555;">{{ e.event }}</span>
+        {% elif e.event == 'tool_call' %}
+          <span style="color:#d4834a;">{{ e.event }}</span>
+        {% elif 'ollama' in e.event %}
+          <span style="color:#6ab5d8;">{{ e.event }}</span>
+        {% elif 'matrix' in e.event %}
+          <span style="color:#9b7cd4;">{{ e.event }}</span>
+        {% else %}
+          {{ e.event }}
+        {% endif %}
+      </td>
+      <td class="evt-detail">
+        {% if e.event == 'ollama_request' %}
+          {{ e.model }} · {{ e.message_count }} msg{{ 's' if e.message_count != 1 }}
+          {% if e.tools %} · tools{% endif %}
+          {% if e.think %} · thinking{% endif %}
+          {% if e.last_user_message %} · <span class="val">"{{ e.last_user_message[:60] }}{% if e.last_user_message|length > 60 %}…{% endif %}"</span>{% endif %}
+        {% elif e.event == 'ollama_response' %}
+          {{ e.model }} · {{ e.duration_ms }}ms
+          {% if e.tool_call_names %} · tools: {{ e.tool_call_names | join(', ') }}{% endif %}
+          {% if e.content %} · <span class="val">"{{ e.content[:60] }}{% if e.content|length > 60 %}…{% endif %}"</span>{% endif %}
+        {% elif e.event == 'tool_call' %}
+          <span style="color:#d4834a;">{{ e.name }}</span>
+          {% if e.args %} · {{ e.args | tojson | truncate(80, True) }}{% endif %}
+        {% elif e.event == 'tool_result' %}
+          {{ e.name }} · {{ e.duration_ms }}ms
+        {% elif e.event == 'error' %}
+          <span style="color:#d45555;">{{ e.error_type }}</span>: {{ e.message }}
+        {% elif e.event == 'matrix_message_in' %}
+          <span class="val">"{{ e.content[:80] }}{% if e.content|length > 80 %}…{% endif %}"</span>
+        {% elif e.event == 'matrix_message_out' %}
+          <span class="val">"{{ e.content[:80] }}{% if e.content|length > 80 %}…{% endif %}"</span>
+        {% elif e.event == 'system_event' %}
+          {{ e.name }}
+          {% if e.session_file is defined %} · {{ e.new_ideas }} new idea(s){% endif %}
+        {% elif e.event == 'session_start' %}
+          {% if e.mode is defined %}mode: {{ e.mode }}{% endif %}
+        {% else %}
+          <span class="dim">—</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="dim">no events logged today yet.</p>
+{% endif %}
+{% endblock %}
