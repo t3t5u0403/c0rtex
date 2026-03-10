@@ -102,20 +102,7 @@ def chat_with_c0rtex(message, history):
 
 
 # Create Gradio interface
-demo = gr.ChatInterface(
-    fn=chat_with_c0rtex,
-    title="c0rtex",
-    description=f"Privacy-first AI assistant running locally. Chatting as: {USERNAME}",
-    examples=[
-        "hey, what can you do?",
-        "list files in my Documents folder",
-        "what's the weather like?",
-        "browse to https://example.com and tell me what you see",
-    ],
-retry_btn="Retry",
-    undo_btn="Undo",
-    clear_btn="Clear",
-)
+demo = gr.ChatInterface(fn=chat_with_c0rtex)
 
 if __name__ == "__main__":
     print("Starting c0rtex web interface...")
