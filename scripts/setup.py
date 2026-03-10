@@ -4,8 +4,12 @@ c0rtex setup wizard
 run this first to configure your c0rtex instance
 """
 
+import json
 import os
+import platform
+import re
 import shutil
+import subprocess
 from pathlib import Path
 
 
@@ -57,6 +61,32 @@ def setup_wizard():
     print("--- installing scripts ---")
     install_scripts(cortex_dir)
 
+    # ── gpu + model detection ─────────────────────────────────
+    print("--- gpu + model detection ---")
+    vram_gb, gpu_name, method = detect_vram()
+    chosen_model = None
+
+    if vram_gb > 0:
+        print(f"  detected: {gpu_name} ({vram_gb} GB VRAM) via {method}")
+    else:
+        print("  no GPU detected — will recommend a small model for CPU")
+
+    rec = recommend_model(vram_gb)
+    print(f"  recommended model: {rec}")
+    choice = input(f"  use {rec} for reasoning tasks? (y/n/custom): ").strip().lower()
+
+    if choice == "y" or choice == "":
+        chosen_model = rec
+    elif choice != "n":
+        chosen_model = choice  # user typed a custom model name
+
+    if chosen_model:
+        offer_model_pull(chosen_model)
+        scripts_dir = cortex_dir / "scripts"
+        patched = patch_model_lines(scripts_dir, chosen_model)
+        if patched:
+            print(f"  > patched model in: {', '.join(patched)}")
+
     # ── generate SOUL.md ──────────────────────────────────────
     print("--- generating personality file ---")
     soul = generate_soul(username, interests, work, tone)
@@ -87,7 +117,10 @@ def setup_wizard():
     print(f"\nyour c0rtex is configured for {username}.")
     print("\nnext steps:")
     print("  1. make sure ollama is running: ollama serve")
-    print("  2. create a modelfile or pull a model: ollama pull qwen3:4b")
+    if chosen_model:
+        print(f"  2. create a modelfile: ollama create c0rtex -f Modelfile  (uses {chosen_model} as base)")
+    else:
+        print("  2. pull a model and create a modelfile: ollama pull <model> && ollama create c0rtex -f Modelfile")
     if matrix_setup:
         print("  3. start matrix bridge: python ~/.c0rtex/scripts/c0rtex_matrix.py")
     else:
@@ -274,6 +307,156 @@ def write_env(env_file, config):
     ])
 
     env_file.write_text("\n".join(lines))
+
+
+def detect_vram():
+    """detect GPU VRAM and return (vram_gb, gpu_name, method)"""
+    # try nvidia-smi
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total,name", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            best_vram, best_name = 0, ""
+            for line in result.stdout.strip().splitlines():
+                parts = [p.strip() for p in line.split(",", 1)]
+                if len(parts) == 2:
+                    vram = float(parts[0]) / 1024  # MiB → GB
+                    if vram > best_vram:
+                        best_vram, best_name = vram, parts[1]
+            if best_vram > 0:
+                return (round(best_vram, 1), best_name, "nvidia-smi")
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        pass
+
+    # try rocm-smi (AMD)
+    try:
+        result = subprocess.run(
+            ["rocm-smi", "--showmeminfo", "vram", "--csv"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            for line in result.stdout.strip().splitlines():
+                if "total" in line.lower():
+                    nums = re.findall(r"(\d+)", line)
+                    if nums:
+                        vram_mb = int(nums[-1])
+                        vram_gb = vram_mb / 1024
+                        return (round(vram_gb, 1), "AMD GPU", "rocm-smi")
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        pass
+
+    # try macOS
+    if platform.system() == "Darwin":
+        try:
+            result = subprocess.run(
+                ["system_profiler", "SPDisplaysDataType", "-json"],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0:
+                data = json.loads(result.stdout)
+                for gpu in data.get("SPDisplaysDataType", []):
+                    vram_str = gpu.get("sppci_vram", gpu.get("spdisplays_vram", ""))
+                    if vram_str:
+                        nums = re.findall(r"(\d+)", vram_str)
+                        if nums:
+                            vram_gb = int(nums[0])
+                            if "MB" in vram_str:
+                                vram_gb /= 1024
+                            name = gpu.get("sppci_model", "Apple GPU")
+                            return (round(vram_gb, 1), name, "system_profiler")
+        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, json.JSONDecodeError):
+            pass
+
+        # apple silicon — use 75% of unified memory
+        try:
+            result = subprocess.run(
+                ["sysctl", "-n", "hw.memsize"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                total_bytes = int(result.stdout.strip())
+                vram_gb = (total_bytes / (1024 ** 3)) * 0.75
+                return (round(vram_gb, 1), "Apple Silicon (unified)", "sysctl")
+        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+            pass
+
+    return (0, "no GPU detected", "none")
+
+
+def recommend_model(vram_gb):
+    """recommend an ollama model based on available VRAM"""
+    if vram_gb >= 24:
+        return "qwen3.5:27b"
+    elif vram_gb >= 12:
+        return "qwen3.5:14b"
+    elif vram_gb >= 6:
+        return "qwen2.5:7b"
+    else:
+        return "qwen2.5:3b"
+
+
+def offer_model_pull(model):
+    """check if model is installed, offer to pull if not. returns True if available."""
+    # check if already installed
+    try:
+        result = subprocess.run(
+            ["ollama", "list"], capture_output=True, text=True, timeout=15
+        )
+        if result.returncode == 0 and model in result.stdout:
+            print(f"  > {model} is already installed")
+            return True
+    except FileNotFoundError:
+        print("  > ollama not found in PATH — install from https://ollama.com")
+        print(f"  > after installing, run: ollama pull {model}")
+        return False
+    except subprocess.TimeoutExpired:
+        print("  > ollama timed out — is it running? (ollama serve)")
+        print(f"  > when ready, run: ollama pull {model}")
+        return False
+
+    # model not installed — offer to pull
+    pull = input(f"  pull {model} now? this may take a while (y/n): ").strip().lower()
+    if pull != "y":
+        print(f"  > skipped. run later: ollama pull {model}")
+        return False
+
+    print(f"  pulling {model}...")
+    try:
+        result = subprocess.run(
+            ["ollama", "pull", model], timeout=600
+        )
+        if result.returncode == 0:
+            print(f"  > {model} pulled successfully")
+            return True
+        else:
+            print(f"  > pull failed. run manually: ollama pull {model}")
+            return False
+    except subprocess.TimeoutExpired:
+        print(f"  > pull timed out. run manually: ollama pull {model}")
+        return False
+
+
+def patch_model_lines(scripts_dir, model):
+    """patch MODEL = '...' lines in installed scripts (skips c0rtex modelfile refs)"""
+    skip_files = {"c0rtex.py", "c0rtex_cron.py", "c0rtex_pinchtab.py", "c0rtex_tools.py"}
+    patch_files = {"c0rtex_matrix.py", "c0rtex_ponder.py", "c0rtex_digest.py",
+                   "c0rtex_briefing.py", "c0rtex_deadlines.py"}
+    pattern = re.compile(r'^(\w*MODEL\w*)\s*=\s*["\'][^"\']+["\']', re.MULTILINE)
+
+    patched = []
+    for filename in patch_files:
+        filepath = scripts_dir / filename
+        if not filepath.exists():
+            continue
+        text = filepath.read_text()
+        new_text, count = pattern.subn(lambda m: f'{m.group(1)} = "{model}"', text)
+        if count > 0:
+            filepath.write_text(new_text)
+            patched.append(filename)
+
+    return patched
 
 
 if __name__ == "__main__":
