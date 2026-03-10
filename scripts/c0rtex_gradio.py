@@ -80,43 +80,42 @@ def chat_with_c0rtex(message, history):
 
     log.event("chat_request", message=message)
 
-    # First request — non-streaming to check for tool calls
     try:
+        # Stream from the start — tool calls arrive in the stream too
         payload = {
             "model": MODEL,
             "messages": messages,
-            "stream": False,
+            "stream": True,
             "tools": TOOLS,
         }
 
-        response = requests.post(OLLAMA_URL, json=payload, timeout=300)
+        response = requests.post(OLLAMA_URL, json=payload, timeout=300, stream=True)
         response.raise_for_status()
-        data = response.json()
 
-        msg = data.get("message", {})
-        tool_calls = msg.get("tool_calls", [])
+        # Accumulate the streamed response
+        partial = ""
+        tool_calls = []
+        for line in response.iter_lines():
+            if not line:
+                continue
+            chunk = json.loads(line)
+            msg = chunk.get("message", {})
 
+            # Accumulate tool calls if present
+            if msg.get("tool_calls"):
+                tool_calls.extend(msg["tool_calls"])
+
+            # Stream text tokens
+            token = msg.get("content", "")
+            if token:
+                partial += token
+                yield partial
+
+            if chunk.get("done"):
+                break
+
+        # If no tool calls, we're done
         if not tool_calls:
-            # No tool calls — re-request with streaming
-            payload["stream"] = True
-            del payload["tools"]
-            payload["messages"] = messages
-
-            response = requests.post(OLLAMA_URL, json=payload, timeout=300, stream=True)
-            response.raise_for_status()
-
-            partial = ""
-            for line in response.iter_lines():
-                if not line:
-                    continue
-                chunk = json.loads(line)
-                token = chunk.get("message", {}).get("content", "")
-                if token:
-                    partial += token
-                    yield partial
-                if chunk.get("done"):
-                    break
-
             log.event("chat_response", response_length=len(partial))
             return
 
@@ -128,8 +127,7 @@ def chat_with_c0rtex(message, history):
 
             log.event("tool_call", tool_name=tool_name, tool_args=tool_args)
 
-            # Show tool running status
-            tool_output += f'<div class="tool-block"><span class="tool-name">[tool: {tool_name}]</span> running...</div>\n'
+            tool_output += f"`[tool: {tool_name}]` running...\n\n"
             yield tool_output
 
             t0 = time.time()
@@ -141,16 +139,15 @@ def chat_with_c0rtex(message, history):
 
             log.event("tool_result", tool_name=tool_name, elapsed_ms=elapsed)
 
-            # Replace "running..." with actual result
+            # Update display with result
             tool_output = tool_output.replace(
-                f'<span class="tool-name">[tool: {tool_name}]</span> running...</div>',
-                f'{format_tool_block(tool_name, result, elapsed)[len("<div class="):]}'
+                f"`[tool: {tool_name}]` running...",
+                f"`[tool: {tool_name}]` ({elapsed}ms)",
             )
+            yield tool_output
 
-            messages.append({"role": "assistant", "content": msg.get("content") or ""})
+            messages.append({"role": "assistant", "content": partial})
             messages.append({"role": "tool", "content": result})
-
-        yield tool_output + "\n\n"
 
         # Stream the final response after tool results
         try:
@@ -162,22 +159,21 @@ def chat_with_c0rtex(message, history):
             response = requests.post(OLLAMA_URL, json=follow_up, timeout=300, stream=True)
             response.raise_for_status()
 
-            partial = tool_output + "\n\n"
             for line in response.iter_lines():
                 if not line:
                     continue
                 chunk = json.loads(line)
                 token = chunk.get("message", {}).get("content", "")
                 if token:
-                    partial += token
-                    yield partial
+                    tool_output += token
+                    yield tool_output
                 if chunk.get("done"):
                     break
 
-            log.event("chat_response", response_length=len(partial))
+            log.event("chat_response", response_length=len(tool_output))
 
         except Exception as e:
-            yield tool_output + f"\n\ntimed out generating response after tool calls: {e}"
+            yield tool_output + f"\n\ntimed out after tool calls: {e}"
 
     except Exception as e:
         log.error("chat_error", str(e))
