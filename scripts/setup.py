@@ -14,7 +14,7 @@ from pathlib import Path
 
 from InquirerPy import inquirer, get_style
 from InquirerPy.separator import Separator
-from InquirerPy.base.list import Choice
+from InquirerPy.base.control import Choice
 from InquirerPy.utils import color_print
 
 STYLE = get_style({
