@@ -13,7 +13,6 @@ c0rtex is a modular system of python scripts that wraps ollama with tool calling
 - **news digest** — fetches rss feeds, ranks by relevance, summarizes top articles, queues the rest for on-demand delivery
 - **morning briefings** — reads your schedule, reasons about dates with extended thinking, sends a daily update
 - **deadline alerts** — parses dates from your school/project files, alerts when things are due soon
-- **signal bridge** — responds to messages as you using a custom persona
 - **web dashboard** — browse conversations, ponderings, digests, logs, and oura health data
 - **single-shot mode** — pipe prompts in from cron jobs or scripts
 - **structured logging** — every event logged as ndjson, viewable in the dashboard
