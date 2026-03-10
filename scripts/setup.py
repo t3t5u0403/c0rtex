@@ -94,7 +94,16 @@ def setup_wizard():
         print(f"  > wrote placeholder {placeholder} — edit the FROM line before creating")
 
     # ── pinchtab (optional) ────────────────────────────────────
-    print("\n--- web browsing (optional) ---")
+    print("\n" + "=" * 60)
+    print("web browsing (optional)")
+    print("=" * 60)
+    print("\nc0rtex can browse the web using Pinchtab for research and information gathering.")
+    print("\nSECURITY NOTE:")
+    print("Web browsing uses prompt-based isolation to protect against malicious websites.")
+    print("While this works well in most cases, it's not 100% foolproof against sophisticated")
+    print("prompt injection attacks. Only browse sites you trust, especially when using tools")
+    print("that access sensitive data.")
+    print()
     pinchtab_installed = install_pinchtab()
 
     if pinchtab_installed:
