@@ -49,16 +49,21 @@ def chat_with_c0rtex(message, history):
 
     # Call Ollama
     try:
-        response = requests.post(
-            OLLAMA_URL,
-            json={
-                "model": MODEL,
-                "messages": messages,
-                "stream": False,
-                "tools": TOOLS,
-            },
-            timeout=120,
-        )
+        payload = {
+            "model": MODEL,
+            "messages": messages,
+            "stream": False,
+            "tools": TOOLS,
+        }
+        print(f"DEBUG: sending {len(messages)} messages to {OLLAMA_URL}")
+        print(json.dumps(payload, indent=2)[:2000])
+
+        response = requests.post(OLLAMA_URL, json=payload, timeout=120)
+
+        if response.status_code != 200:
+            print(f"DEBUG: ollama returned {response.status_code}")
+            print(f"DEBUG: response body: {response.text[:1000]}")
+
         response.raise_for_status()
         data = response.json()
 
@@ -109,7 +114,7 @@ if __name__ == "__main__":
     print("Starting c0rtex web interface...")
     print("Open http://localhost:3701 in your browser")
     demo.launch(
-        server_name="127.0.0.1",
+        server_name="0.0.0.0",
         server_port=3701,
         share=False,  # Set to True to create public link
     )
