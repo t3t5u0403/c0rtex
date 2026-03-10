@@ -90,7 +90,7 @@ def setup_wizard():
     else:
         # write a placeholder Modelfile the user can edit later
         placeholder = cortex_dir / "Modelfile"
-        placeholder.write_text("# set your base model here, then run: ollama create c0rtex -f this-file\nFROM qwen2.5:3b\n")
+        placeholder.write_text("# set your base model here, then run: ollama create c0rtex -f this-file\nFROM qwen3.5:2b\n")
         print(f"  > wrote placeholder {placeholder} — edit the FROM line before creating")
 
     # ── generate SOUL.md ──────────────────────────────────────
@@ -396,14 +396,18 @@ def detect_vram():
 
 def recommend_model(vram_gb):
     """recommend an ollama model based on available VRAM"""
-    if vram_gb >= 24:
-        return "qwen3.5:27b"
+    if vram_gb >= 48:
+        return "qwen3.5:122b"
+    elif vram_gb >= 24:
+        return "qwen3.5:35b"
     elif vram_gb >= 12:
-        return "qwen3.5:14b"
+        return "qwen3.5:27b"
     elif vram_gb >= 6:
-        return "qwen2.5:7b"
+        return "qwen3.5:9b"
+    elif vram_gb >= 4:
+        return "qwen3.5:4b"
     else:
-        return "qwen2.5:3b"
+        return "qwen3.5:2b"
 
 
 def offer_model_pull(model):

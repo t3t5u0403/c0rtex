@@ -31,8 +31,8 @@ pip install -r requirements.txt --break-system-packages
 # make sure ollama is running
 ollama serve
 
-# pull a model (or create a custom modelfile)
-ollama pull qwen3:4b
+# pull a model (setup wizard will recommend one based on your GPU)
+ollama pull qwen3.5:9b
 
 # run the setup wizard
 python c0rtex/scripts/setup.py
@@ -173,7 +173,7 @@ pip install -r requirements.txt --break-system-packages
 
 ## requirements
 
-- python 3.10+
+- python 3.10+ (macOS users: `brew install python@3.11`)
 - ollama running locally
 - a gpu with enough vram for your chosen model (or cpu inference if you're patient)
 
@@ -185,10 +185,14 @@ the personality is defined in `~/.c0rtex/data/SOUL.md` — edit it to change how
 
 models are configured per-script at the top of each file. the defaults are:
 - `c0rtex` (custom modelfile) — interactive repl and cron
-- `qwen3.5:27b` — matrix bridge, pondering, digest
-- `qwen3:32b` — briefings, deadline analysis (extended thinking)
+- `qwen3.5:27b`+ — matrix bridge, pondering, digest (setup wizard picks based on your GPU)
+- same model for briefings and deadline analysis (extended thinking)
 
 swap these for whatever fits your hardware.
+
+## third-party components
+
+- `scripts/pinchtab/` — vendored from [pinchtab/pinchtab](https://github.com/pinchtab/pinchtab) (MIT License)
 
 ## license
 
