@@ -12,127 +12,245 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from InquirerPy import inquirer, get_style
+from InquirerPy.separator import Separator
+from InquirerPy.base.list import Choice
+from InquirerPy.utils import color_print
+
+STYLE = get_style({
+    "questionmark": "#ff9d00 bold",
+    "answer": "#61afef bold",
+    "input": "#ffffff",
+    "pointer": "#ff9d00 bold",
+    "checkbox": "#61afef",
+    "instruction": "#6c7086 italic",
+}, style_override=False)
+
+BANNER = r"""
+   ___  ___       _
+  / __\/ _ \ _ __| |_ _____  __
+ / /  | | | | '__| __/ _ \ \/ /
+/ /___| |_| | |  | ||  __/>  <
+\____/ \___/|_|   \__\___/_/\_\
+"""
+
+
+def section(title):
+    color_print([("\n", ""), ("#ff9d00 bold", f"  {title}\n")])
+
+
+def ok(msg):
+    print(f"  \033[32m✓\033[0m {msg}")
+
+
+def fail(msg):
+    print(f"  \033[31m✗\033[0m {msg}")
+
+
+def info(msg):
+    print(f"  \033[36m→\033[0m {msg}")
+
 
 def setup_wizard():
-    print("=" * 60)
-    print("c0rtex setup wizard")
-    print("=" * 60)
-    print()
+    print(BANNER)
+    color_print([("#ff9d00 bold", "  setup wizard\n")])
 
     # ── identity ──────────────────────────────────────────────
-    username = input("what should i call you? (default: user): ").strip() or "user"
+    section("identity")
+    username = inquirer.text(
+        message="what should i call you?",
+        default="user",
+        style=STYLE,
+    ).execute()
 
     # ── personality ───────────────────────────────────────────
-    print("\ntell me a bit about yourself so i can tune my personality:")
-    interests = input("main interests/hobbies: ").strip()
-    work = input("what do you do? (student/dev/security/etc): ").strip()
-    tone = input("preferred tone (casual/professional/sarcastic): ").strip() or "casual"
+    section("personality")
+    info("tell me a bit about yourself so i can tune my personality")
+    interests = inquirer.text(
+        message="interests/hobbies:",
+        long_instruction="(optional)",
+        style=STYLE,
+    ).execute()
+    work = inquirer.text(
+        message="what do you do?",
+        long_instruction="(optional)",
+        style=STYLE,
+    ).execute()
+    tone = inquirer.select(
+        message="preferred tone:",
+        choices=[
+            Choice(value="casual", name="casual — chill, sharp, a little sarcastic"),
+            Choice(value="professional", name="professional — clean and approachable"),
+            Choice(value="sarcastic", name="sarcastic — witty and brutally honest"),
+        ],
+        default="casual",
+        style=STYLE,
+    ).execute()
 
     # ── ollama ────────────────────────────────────────────────
-    print("\n--- ollama setup ---")
-    ollama_host = input(f"ollama host (default: http://localhost:11434): ").strip() or "http://localhost:11434"
+    section("ollama")
+    ollama_host = inquirer.text(
+        message="ollama host:",
+        default="http://localhost:11434",
+        style=STYLE,
+    ).execute()
 
     # ── matrix (optional) ─────────────────────────────────────
-    print("\n--- matrix bridge (optional - press enter to skip) ---")
-    matrix_setup = input("set up matrix bridge? (y/n): ").strip().lower() == 'y'
+    section("matrix bridge")
+    matrix_setup = inquirer.confirm(
+        message="set up matrix bridge?",
+        default=False,
+        style=STYLE,
+    ).execute()
 
     matrix_config = {}
     if matrix_setup:
         matrix_config = {
-            'homeserver': input("matrix homeserver (default: http://localhost:8008): ").strip() or "http://localhost:8008",
-            'user': input("matrix user (@bot:your.server): ").strip(),
-            'token': input("matrix access token: ").strip(),
-            'room': input("matrix room ID (!abc:your.server): ").strip(),
+            'homeserver': inquirer.text(
+                message="matrix homeserver:",
+                default="http://localhost:8008",
+                style=STYLE,
+            ).execute(),
+            'user': inquirer.text(
+                message="matrix user (@bot:your.server):",
+                style=STYLE,
+            ).execute(),
+            'token': inquirer.text(
+                message="matrix access token:",
+                style=STYLE,
+            ).execute(),
+            'room': inquirer.text(
+                message="matrix room ID (!abc:your.server):",
+                style=STYLE,
+            ).execute(),
         }
 
     # ── homelab integrations (optional) ───────────────────────
-    print("\n--- homelab integrations (optional - press enter to skip all) ---")
-    truenas_key = input("truenas API key (enter to skip): ").strip()
+    section("homelab integrations")
+    truenas_key = inquirer.text(
+        message="truenas API key:",
+        long_instruction="(enter to skip)",
+        style=STYLE,
+    ).execute()
     truenas_host = ""
     if truenas_key:
-        truenas_host = input("truenas host (default: http://192.168.1.201): ").strip() or "http://192.168.1.201"
+        truenas_host = inquirer.text(
+            message="truenas host:",
+            default="http://192.168.1.201",
+            style=STYLE,
+        ).execute()
 
     # ── create directories ────────────────────────────────────
-    print("\n--- creating directories ---")
+    section("creating directories")
     cortex_dir = Path.home() / ".c0rtex"
     create_directories(cortex_dir)
 
     # ── install scripts ───────────────────────────────────────
-    print("--- installing scripts ---")
+    section("installing scripts")
     install_scripts(cortex_dir)
 
     # ── gpu + model detection ─────────────────────────────────
-    print("--- gpu + model detection ---")
+    section("gpu + model detection")
     vram_gb, gpu_name, method = detect_vram()
     chosen_model = None
 
     if vram_gb > 0:
-        print(f"  detected: {gpu_name} ({vram_gb} GB VRAM) via {method}")
+        ok(f"detected: {gpu_name} ({vram_gb} GB VRAM) via {method}")
     else:
-        print("  no GPU detected — will recommend a small model for CPU")
+        info("no GPU detected — will recommend a small model for CPU")
 
     rec = recommend_model(vram_gb)
-    print(f"  recommended model: {rec}")
-    choice = input(f"  use {rec} for reasoning tasks? (y/n/custom): ").strip().lower()
 
-    if choice == "y" or choice == "":
-        chosen_model = rec
-    elif choice != "n":
-        chosen_model = choice  # user typed a custom model name
+    all_models = [
+        "qwen3.5:2b",
+        "qwen3.5:4b",
+        "qwen3.5:9b",
+        "qwen3.5:27b",
+        "qwen3.5:35b",
+        "qwen3.5:122b",
+    ]
+
+    model_choices = []
+    for m in all_models:
+        label = f"{m}  [recommended]" if m == rec else m
+        model_choices.append(Choice(value=m, name=label))
+    model_choices.append(Separator())
+    model_choices.append(Choice(value="__custom__", name="Custom..."))
+    model_choices.append(Choice(value="__skip__", name="Skip"))
+
+    model_pick = inquirer.select(
+        message="select model for reasoning tasks:",
+        choices=model_choices,
+        default=rec,
+        style=STYLE,
+    ).execute()
+
+    if model_pick == "__custom__":
+        chosen_model = inquirer.text(
+            message="model name:",
+            style=STYLE,
+        ).execute()
+    elif model_pick == "__skip__":
+        chosen_model = None
+    else:
+        chosen_model = model_pick
 
     if chosen_model:
         offer_model_pull(chosen_model)
         scripts_dir = cortex_dir / "scripts"
         patched = patch_model_lines(scripts_dir, chosen_model)
         if patched:
-            print(f"  > patched model in: {', '.join(patched)}")
+            ok(f"patched model in: {', '.join(patched)}")
         create_modelfile(cortex_dir, chosen_model)
     else:
         # write a placeholder Modelfile the user can edit later
         placeholder = cortex_dir / "Modelfile"
         placeholder.write_text("# set your base model here, then run: ollama create c0rtex -f this-file\nFROM qwen3.5:2b\n")
-        print(f"  > wrote placeholder {placeholder} — edit the FROM line before creating")
+        info(f"wrote placeholder {placeholder} — edit the FROM line before creating")
 
     # ── pinchtab (optional) ────────────────────────────────────
-    print("\n" + "=" * 60)
-    print("web browsing (optional)")
-    print("=" * 60)
-    print("\nc0rtex can browse the web using Pinchtab for research and information gathering.")
-    print("\nSECURITY NOTE:")
-    print("Web browsing uses prompt-based isolation to protect against malicious websites.")
-    print("While this works well in most cases, it's not 100% foolproof against sophisticated")
-    print("prompt injection attacks. Only browse sites you trust, especially when using tools")
-    print("that access sensitive data.")
-    print()
+    section("web browsing")
+    color_print([
+        ("", "  c0rtex can browse the web using Pinchtab for research.\n\n"),
+        ("#ff9d00 bold", "  security note: "),
+        ("", "web browsing uses prompt-based isolation to protect\n"),
+        ("", "  against malicious websites. while this works well in most cases,\n"),
+        ("", "  it's not 100% foolproof against sophisticated prompt injection.\n"),
+        ("", "  only browse sites you trust.\n"),
+    ])
     pinchtab_installed = install_pinchtab()
 
     if pinchtab_installed:
-        start = input("  start pinchtab service now? (y/n): ").strip().lower()
-        if start == "y":
+        start = inquirer.confirm(
+            message="start pinchtab service now?",
+            default=False,
+            style=STYLE,
+        ).execute()
+        if start:
             try:
                 subprocess.Popen(
                     ["pinchtab"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-                print("  > pinchtab running on http://localhost:9867")
+                ok("pinchtab running on http://localhost:9867")
             except Exception as e:
-                print(f"  > failed to start pinchtab: {e}")
-                print("  > start it manually later with: pinchtab")
+                fail(f"failed to start pinchtab: {e}")
+                info("start it manually later with: pinchtab")
 
     # ── generate SOUL.md ──────────────────────────────────────
-    print("--- generating personality file ---")
+    section("generating personality file")
     soul = generate_soul(username, interests, work, tone)
     soul_file = cortex_dir / "data" / "SOUL.md"
     soul_file.write_text(soul)
-    print(f"  > {soul_file}")
+    ok(str(soul_file))
 
     # ── create skeleton data files ────────────────────────────
-    print("--- creating data files ---")
+    section("creating data files")
     create_data_files(cortex_dir / "data", username)
 
     # ── write .env ────────────────────────────────────────────
-    print("--- writing configuration ---")
+    section("writing configuration")
     env_file = cortex_dir / ".env"
     write_env(env_file, {
         'username': username,
@@ -141,29 +259,35 @@ def setup_wizard():
         'truenas_key': truenas_key,
         **matrix_config,
     })
-    print(f"  > {env_file}")
+    ok(str(env_file))
 
     # ── done ──────────────────────────────────────────────────
-    print("\n" + "=" * 60)
-    print("setup complete!")
-    print("=" * 60)
-    print(f"\nyour c0rtex is configured for {username}.")
-    print("\nnext steps:")
-    print("  1. make sure ollama is running: ollama serve")
+    pinchtab_status = "installed" if pinchtab_installed else "skipped"
+    matrix_status = "configured" if matrix_setup else "skipped"
+
+    print()
+    print("  \033[33m══════════════════════════════════════════\033[0m")
+    print("  \033[32m✓\033[0m setup complete!")
+    print("  \033[33m══════════════════════════════════════════\033[0m")
+    print()
+    print(f"  configured for: \033[1m{username}\033[0m")
+    print(f"  model: \033[1m{chosen_model or 'none (placeholder written)'}\033[0m")
+    print(f"  pinchtab: {pinchtab_status}")
+    print(f"  matrix: {matrix_status}")
+    print()
+    print("  \033[1mnext steps:\033[0m")
+    print("    1. ollama serve")
     if chosen_model:
-        print(f"  2. if you skipped model creation: ollama create c0rtex -f {cortex_dir / 'Modelfile'}")
+        print(f"    2. python ~/.c0rtex/scripts/c0rtex.py")
     else:
-        print("  2. pull a model and create the c0rtex model:")
-        print("     ollama pull <model>")
-        print(f"     edit {cortex_dir / 'Modelfile'} to set FROM <model>")
-        print(f"     ollama create c0rtex -f {cortex_dir / 'Modelfile'}")
+        print("    2. pull a model and create the c0rtex model:")
+        print("       ollama pull <model>")
+        print(f"       edit {cortex_dir / 'Modelfile'} to set FROM <model>")
+        print(f"       ollama create c0rtex -f {cortex_dir / 'Modelfile'}")
     if matrix_setup:
-        print("  3. start matrix bridge: python ~/.c0rtex/scripts/c0rtex_matrix.py")
+        print("    3. start matrix bridge: python ~/.c0rtex/scripts/c0rtex_matrix.py")
     else:
-        print("  3. start chatting: python ~/.c0rtex/scripts/c0rtex.py")
-    print(f"\n  config: {env_file}")
-    print(f"  personality: {soul_file}")
-    print(f"\n  edit {env_file} to add more integrations (truenas, unifi, oura, signal, etc.)")
+        print("    3. start chatting: python ~/.c0rtex/scripts/c0rtex.py")
     print()
 
 
@@ -217,7 +341,7 @@ def create_directories(cortex_dir):
 
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
-        print(f"  > {d}")
+        ok(str(d))
 
 
 def install_scripts(cortex_dir):
@@ -233,7 +357,7 @@ def install_scripts(cortex_dir):
     for py_file in src_scripts.glob("*.py"):
         shutil.copy2(py_file, dst_scripts / py_file.name)
         count += 1
-    print(f"  > copied {count} scripts to {dst_scripts}")
+    ok(f"copied {count} scripts to {dst_scripts}")
 
     # copy templates if they exist
     src_templates = src_root / "templates"
@@ -244,7 +368,7 @@ def install_scripts(cortex_dir):
                 shutil.copy2(tmpl, dst_templates / tmpl.name)
                 t_count += 1
         if t_count:
-            print(f"  > copied {t_count} templates to {dst_templates}")
+            ok(f"copied {t_count} templates to {dst_templates}")
 
 
 def create_data_files(data_dir, username):
@@ -261,9 +385,9 @@ def create_data_files(data_dir, username):
         path = data_dir / filename
         if not path.exists():
             path.write_text(content)
-            print(f"  > {path}")
+            ok(str(path))
         else:
-            print(f"  > {path} (already exists, skipped)")
+            info(f"{path} (already exists, skipped)")
 
 
 def write_env(env_file, config):
@@ -445,78 +569,85 @@ def offer_model_pull(model):
             ["ollama", "list"], capture_output=True, text=True, timeout=15
         )
         if result.returncode == 0 and model in result.stdout:
-            print(f"  > {model} is already installed")
+            ok(f"{model} is already installed")
             return True
     except FileNotFoundError:
-        print("  > ollama not found in PATH — install from https://ollama.com")
-        print(f"  > after installing, run: ollama pull {model}")
+        fail("ollama not found in PATH — install from https://ollama.com")
+        info(f"after installing, run: ollama pull {model}")
         return False
     except subprocess.TimeoutExpired:
-        print("  > ollama timed out — is it running? (ollama serve)")
-        print(f"  > when ready, run: ollama pull {model}")
+        fail("ollama timed out — is it running? (ollama serve)")
+        info(f"when ready, run: ollama pull {model}")
         return False
 
     # model not installed — offer to pull
-    pull = input(f"  pull {model} now? this may take a while (y/n): ").strip().lower()
-    if pull != "y":
-        print(f"  > skipped. run later: ollama pull {model}")
+    pull = inquirer.confirm(
+        message=f"pull {model} now? this may take a while",
+        default=True,
+        style=STYLE,
+    ).execute()
+    if not pull:
+        info(f"skipped. run later: ollama pull {model}")
         return False
 
-    print(f"  pulling {model}...")
+    info(f"pulling {model}...")
     try:
         result = subprocess.run(
             ["ollama", "pull", model], timeout=600
         )
         if result.returncode == 0:
-            print(f"  > {model} pulled successfully")
+            ok(f"{model} pulled successfully")
             return True
         else:
-            print(f"  > pull failed. run manually: ollama pull {model}")
+            fail(f"pull failed. run manually: ollama pull {model}")
             return False
     except subprocess.TimeoutExpired:
-        print(f"  > pull timed out. run manually: ollama pull {model}")
+        fail(f"pull timed out. run manually: ollama pull {model}")
         return False
 
 
 def install_pinchtab():
     """detect platform and install pinchtab using the best available method."""
     if shutil.which("pinchtab"):
-        print("  pinchtab already installed")
+        ok("pinchtab already installed")
         return True
 
-    print("  web browsing requires pinchtab (https://pinchtab.com)")
-    choice = input("  install pinchtab now? (y/n): ").strip().lower()
+    install = inquirer.confirm(
+        message="install pinchtab for web browsing?",
+        default=False,
+        style=STYLE,
+    ).execute()
 
-    if choice != "y":
-        print("  > skipped. install later with:")
+    if not install:
+        info("skipped. install later with:")
         print("    npm install -g pinchtab")
         print("    OR: curl -fsSL https://pinchtab.com/install.sh | bash")
         return False
 
     # try npm first (cross-platform)
     if shutil.which("npm"):
-        print("  installing via npm...")
+        info("installing via npm...")
         result = subprocess.run(["npm", "install", "-g", "pinchtab"],
                                 capture_output=True, text=True)
         if result.returncode == 0:
-            print("  > pinchtab installed via npm")
+            ok("pinchtab installed via npm")
             return True
         else:
-            print(f"  > npm install failed: {result.stderr.strip()}")
+            fail(f"npm install failed: {result.stderr.strip()}")
 
     # try homebrew on macOS
     if platform.system() == "Darwin" and shutil.which("brew"):
-        print("  installing via homebrew...")
+        info("installing via homebrew...")
         result = subprocess.run(["brew", "install", "pinchtab"],
                                 capture_output=True, text=True)
         if result.returncode == 0:
-            print("  > pinchtab installed via homebrew")
+            ok("pinchtab installed via homebrew")
             return True
         else:
-            print(f"  > homebrew install failed: {result.stderr.strip()}")
+            fail(f"homebrew install failed: {result.stderr.strip()}")
 
     # fallback
-    print("  > couldn't auto-install. run manually:")
+    fail("couldn't auto-install. run manually:")
     print("    curl -fsSL https://pinchtab.com/install.sh | bash")
     return False
 
@@ -525,11 +656,15 @@ def create_modelfile(cortex_dir, model):
     """generate ~/.c0rtex/Modelfile and offer to create the c0rtex ollama model."""
     modelfile_path = cortex_dir / "Modelfile"
     modelfile_path.write_text(f"FROM {model}\n")
-    print(f"  > wrote {modelfile_path}")
+    ok(f"wrote {modelfile_path}")
 
-    create = input("  create 'c0rtex' ollama model now? (y/n): ").strip().lower()
-    if create != "y":
-        print(f"  > skipped. run later: ollama create c0rtex -f {modelfile_path}")
+    create = inquirer.confirm(
+        message="create 'c0rtex' ollama model now?",
+        default=True,
+        style=STYLE,
+    ).execute()
+    if not create:
+        info(f"skipped. run later: ollama create c0rtex -f {modelfile_path}")
         return
 
     try:
@@ -538,13 +673,13 @@ def create_modelfile(cortex_dir, model):
             timeout=120
         )
         if result.returncode == 0:
-            print("  > 'c0rtex' model created successfully")
+            ok("'c0rtex' model created successfully")
         else:
-            print(f"  > creation failed. run manually: ollama create c0rtex -f {modelfile_path}")
+            fail(f"creation failed. run manually: ollama create c0rtex -f {modelfile_path}")
     except FileNotFoundError:
-        print(f"  > ollama not found. run later: ollama create c0rtex -f {modelfile_path}")
+        fail(f"ollama not found. run later: ollama create c0rtex -f {modelfile_path}")
     except subprocess.TimeoutExpired:
-        print(f"  > timed out. run manually: ollama create c0rtex -f {modelfile_path}")
+        fail(f"timed out. run manually: ollama create c0rtex -f {modelfile_path}")
 
 
 def patch_model_lines(scripts_dir, model):
@@ -572,6 +707,6 @@ if __name__ == "__main__":
     try:
         setup_wizard()
     except KeyboardInterrupt:
-        print("\n\nsetup cancelled.")
+        print("\n\n  setup cancelled.")
     except Exception as e:
-        print(f"\nerror during setup: {e}")
+        print(f"\n  error during setup: {e}")
