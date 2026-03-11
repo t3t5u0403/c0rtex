@@ -143,25 +143,29 @@ class StatusFooter(Static):
 
 
 class ChatMessage(Static):
-    """A single chat message with CRT box-drawing frame."""
+    """A single chat message with CRT box-drawing frame.
+
+    Uses update() instead of render() so Textual recalculates layout
+    when content grows (e.g. during streaming or multiline responses).
+    """
 
     def __init__(self, role: str, content: str, **kwargs) -> None:
         super().__init__(**kwargs)
         self.role = role
         self.msg_content = content
 
+    def on_mount(self) -> None:
+        self.update(self._build())
+
     @staticmethod
     def _strip_md(text: str) -> str:
         """Strip common markdown syntax so it doesn't render as raw noise."""
         import re
-        # bold/italic: **text**, *text*, __text__, _text_
         text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
         text = re.sub(r'__(.+?)__', r'\1', text)
         text = re.sub(r'\*(.+?)\*', r'\1', text)
         text = re.sub(r'(?<!\w)_(.+?)_(?!\w)', r'\1', text)
-        # inline code: `text`
         text = re.sub(r'`(.+?)`', r'\1', text)
-        # headers: ### text → text
         text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
         return text
 
@@ -170,10 +174,10 @@ class ChatMessage(Static):
         """Wrap multiline text in a box-drawing frame."""
         text = ChatMessage._strip_md(text)
         lines = text.split("\n")
-        body = "\n".join(f"│ {line}" for line in lines)
+        body = "\n".join(f"│  {line}" for line in lines)
         return f"┌─ {label} ─\n{body}\n└─"
 
-    def render(self) -> str:
+    def _build(self) -> str:
         if self.role == "user":
             return self._frame("you", self.msg_content)
         elif self.role == "assistant":
@@ -182,7 +186,7 @@ class ChatMessage(Static):
 
     def update_content(self, content: str) -> None:
         self.msg_content = content
-        self.refresh()
+        self.update(self._build())
 
 
 class LoadingIndicator(Static):
