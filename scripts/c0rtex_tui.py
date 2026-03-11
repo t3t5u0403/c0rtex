@@ -150,17 +150,34 @@ class ChatMessage(Static):
         self.role = role
         self.msg_content = content
 
+    @staticmethod
+    def _strip_md(text: str) -> str:
+        """Strip common markdown syntax so it doesn't render as raw noise."""
+        import re
+        # bold/italic: **text**, *text*, __text__, _text_
+        text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+        text = re.sub(r'__(.+?)__', r'\1', text)
+        text = re.sub(r'\*(.+?)\*', r'\1', text)
+        text = re.sub(r'(?<!\w)_(.+?)_(?!\w)', r'\1', text)
+        # inline code: `text`
+        text = re.sub(r'`(.+?)`', r'\1', text)
+        # headers: ### text → text
+        text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+        return text
+
+    @staticmethod
+    def _frame(label: str, text: str) -> str:
+        """Wrap multiline text in a box-drawing frame."""
+        text = ChatMessage._strip_md(text)
+        lines = text.split("\n")
+        body = "\n".join(f"│ {line}" for line in lines)
+        return f"┌─ {label} ─\n{body}\n└─"
+
     def render(self) -> str:
         if self.role == "user":
-            return f"┌─ you ─\n│ {self.msg_content}\n└─"
+            return self._frame("you", self.msg_content)
         elif self.role == "assistant":
-            return f"┌─ c0rtex ─\n│ {self.msg_content}\n└─"
-        elif self.role == "tool_call":
-            return self.msg_content
-        elif self.role == "error":
-            return self.msg_content
-        elif self.role == "system":
-            return self.msg_content
+            return self._frame("c0rtex", self.msg_content)
         return self.msg_content
 
     def update_content(self, content: str) -> None:
