@@ -68,6 +68,14 @@ today's date is {{date}}.
 """
 
 
+LEET_MAP = str.maketrans("aeiostlAEIOSTL", "43105714310571")
+
+
+def glitchify(text: str) -> str:
+    """Corrupt text with leetspeak substitutions."""
+    return text.translate(LEET_MAP)
+
+
 # ── soul / history ──────────────────────────────────────────────────────────
 
 def load_soul():
@@ -99,14 +107,22 @@ class HeaderBar(Static):
     """CRT-style machine interface header."""
 
     pulse_on = reactive(True)
+    conn_ok = reactive(True)
 
     def render(self) -> str:
         indicator = "◉" if self.pulse_on else "◎"
-        bar = "██████████░░"
-        return f" ▌c0rtex v{VERSION}▐   {bar}  SYS:OK   {indicator} ONLINE "
+        if self.conn_ok:
+            bar = "██████████░░"
+            return f" ▌c0rtex v{VERSION}▐   {bar}  SYS:OK   {indicator} ONLINE "
+        else:
+            bar = "██░░░░░░░░░░"
+            return f" ▌c0rtex v{VERSION}▐   {bar}  SYS:ERR  {indicator} OFFLINE "
 
     def toggle_pulse(self) -> None:
         self.pulse_on = not self.pulse_on
+
+    def set_conn(self, ok: bool) -> None:
+        self.conn_ok = ok
 
 
 class StatusFooter(Static):
@@ -153,19 +169,15 @@ class ChatMessage(Static):
 
 
 class LoadingIndicator(Static):
-    """Animated loading widget."""
+    """Animated loading widget — data stream style."""
 
     frame = reactive(0)
 
-    FRAMES = [
-        "◢◣ establishing link...",
-        "◤◥ establishing link...",
-        "◢◣ establishing link...",
-        "◤◥ establishing link...",
-    ]
-
     def render(self) -> str:
-        return f"  {self.FRAMES[self.frame % len(self.FRAMES)]}"
+        # cycling progress bar: [■■□□□□] receiving...
+        pos = self.frame % 6
+        bar = "■" * (pos + 1) + "□" * (5 - pos)
+        return f"  [{bar}] receiving..."
 
     def advance(self) -> None:
         self.frame += 1
@@ -186,6 +198,11 @@ class C0rtexApp(App):
         background: #001100;
         color: #00ff41;
         text-style: bold;
+    }
+
+    #header-bar.conn-lost {
+        background: #110000;
+        color: #ff3333;
     }
 
     #chat {
@@ -242,6 +259,11 @@ class C0rtexApp(App):
 
     #input-box:focus {
         border: tall #00ff41;
+    }
+
+    #input-box.flash {
+        border: tall #41ff83;
+        background: #001a00;
     }
 
     #status-footer {
@@ -301,6 +323,9 @@ class C0rtexApp(App):
         self.set_interval(1.2, self._pulse_header)
         # footer flicker timer
         self.set_interval(8.0, self._flicker_footer)
+        # connection check timer
+        self._check_connection()
+        self.set_interval(15.0, self._check_connection)
 
         self.query_one("#input-box").focus()
 
@@ -313,6 +338,31 @@ class C0rtexApp(App):
             footer.set_flicker(random.choice(FOOTER_FLICKERS))
             self.set_timer(2.0, footer.clear_flicker)
 
+    @work(thread=True, exclusive=True, group="conn_check")
+    def _check_connection(self) -> None:
+        """Ping ollama to see if it's reachable."""
+        try:
+            requests.get(f"{OLLAMA_HOST}/api/version", timeout=3)
+            ok = True
+        except Exception:
+            ok = False
+
+        def _update():
+            header = self.query_one(HeaderBar)
+            header.set_conn(ok)
+            if ok:
+                header.remove_class("conn-lost")
+            else:
+                header.add_class("conn-lost")
+
+        self.call_from_thread(_update)
+
+    def _flash_input(self) -> None:
+        """Brief border flash on the input box."""
+        inp = self.query_one("#input-box")
+        inp.add_class("flash")
+        self.set_timer(0.15, lambda: inp.remove_class("flash"))
+
     def _scroll_to_bottom(self) -> None:
         chat = self.query_one("#chat")
         chat.scroll_end(animate=False)
@@ -322,6 +372,7 @@ class C0rtexApp(App):
         if not user_input:
             return
         event.input.value = ""
+        self._flash_input()
 
         # commands
         if user_input.lower() in ("/exit", "exit"):
@@ -541,38 +592,30 @@ class C0rtexApp(App):
         except requests.exceptions.Timeout:
             log.error("timeout", "ollama timed out")
             self.call_from_thread(self._remove_loading)
-            self.call_from_thread(
-                self._add_error,
-                "╔═══ SYSTEM FAULT ═══════════════════════╗\n"
-                "║ ▓▒░ timeout ░▒▓                        ║\n"
-                "║ ollama timed out. try again?            ║\n"
-                "╚════════════════════════════════════════╝",
-            )
+            self.call_from_thread(self._show_fault, "timeout", "ollama timed out. try again?")
             return None
 
         except requests.exceptions.ConnectionError:
             log.error("connection", "cannot reach ollama")
             self.call_from_thread(self._remove_loading)
-            self.call_from_thread(
-                self._add_error,
-                "╔═══ SYSTEM FAULT ═══════════════════════╗\n"
-                "║ ▓▒░ connection refused ░▒▓              ║\n"
-                "║ can't reach ollama. is it running?      ║\n"
-                "╚════════════════════════════════════════╝",
-            )
+            self.call_from_thread(self._show_fault, "connection refused", "can't reach ollama. is it running?")
             return None
 
         except Exception as e:
             log.error("unknown", str(e))
             self.call_from_thread(self._remove_loading)
-            self.call_from_thread(
-                self._add_error,
-                f"╔═══ SYSTEM FAULT ═══════════════════════╗\n"
-                f"║ ▓▒░ [ERR:corrupted_response] ░▒▓       ║\n"
-                f"║ {str(e)[:40]:<40} ║\n"
-                f"╚════════════════════════════════════════╝",
-            )
+            self.call_from_thread(self._show_fault, "corrupted response", str(e)[:40])
             return None
+
+    def _show_fault(self, fault_type: str, detail: str) -> None:
+        """Render a glitched system fault block."""
+        glitched = glitchify(fault_type.upper())
+        self._add_error(
+            f"╔═══ SYSTEM FAULT ═══════════════════════╗\n"
+            f"║ ▓▒░ {glitched:<34} ░▒▓ ║\n"
+            f"║ {detail:<40} ║\n"
+            f"╚════════════════════════════════════════╝"
+        )
 
     def action_clear_chat(self) -> None:
         """Clear chat history and UI."""
