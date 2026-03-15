@@ -98,3 +98,14 @@ SIGNAL_CLI_TCP = os.environ.get("SIGNAL_CLI_TCP", "localhost:7583")
 
 # user identity (set by setup wizard)
 USERNAME = os.environ.get("CORTEX_USERNAME", "user")
+
+
+def ensure_directories():
+    """Create the full .c0rtex directory structure if it doesn't exist.
+
+    Safe to call multiple times — uses exist_ok=True everywhere.
+    This lets c0rtex run even if setup.py failed or was never run.
+    """
+    for d in (DATA_DIR, IMAGE_CACHE_DIR, LOG_DIR, WORKSPACE_DIR,
+              SCRIPTS_DIR, PONDERINGS_DIR, DIGESTS_DIR, TEMPLATES_DIR):
+        d.mkdir(parents=True, exist_ok=True)

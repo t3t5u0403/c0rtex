@@ -6,6 +6,8 @@ green phosphor on black. ascii borders. glitch effects. the whole deal.
 
 import json
 import random
+import shutil
+import subprocess
 import time
 import requests
 from datetime import datetime
@@ -20,7 +22,7 @@ from textual.widgets import Footer, Input, Static
 
 from c0rtex_log import get_logger
 from c0rtex_tools import TOOLS, execute_tool
-from c0rtex_paths import CORTEX_DIR, HISTORY_FILE, SOUL_FILE, OLLAMA_HOST, USERNAME
+from c0rtex_paths import CORTEX_DIR, HISTORY_FILE, SOUL_FILE, OLLAMA_HOST, USERNAME, ensure_directories
 
 log = get_logger("tui")
 
@@ -71,6 +73,23 @@ today's date is {{date}}.
 LEET_MAP = str.maketrans("aeiostlAEIOSTL", "43105714310571")
 
 
+def copy_to_clipboard(text: str) -> bool:
+    """Copy text to system clipboard. Returns True on success."""
+    for cmd in ("wl-copy", "xclip", "xsel", "pbcopy", "clip.exe"):
+        if shutil.which(cmd):
+            args = [cmd]
+            if cmd == "xclip":
+                args += ["-selection", "clipboard"]
+            elif cmd == "xsel":
+                args += ["--clipboard", "--input"]
+            try:
+                subprocess.run(args, input=text.encode(), check=True, timeout=5)
+                return True
+            except Exception:
+                continue
+    return False
+
+
 def glitchify(text: str) -> str:
     """Corrupt text with leetspeak substitutions."""
     return text.translate(LEET_MAP)
@@ -96,7 +115,7 @@ def load_history() -> list:
 
 
 def save_history(messages: list):
-    CORTEX_DIR.mkdir(parents=True, exist_ok=True)
+    HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
     trimmed = messages[-MAX_HISTORY:]
     HISTORY_FILE.write_text(json.dumps(trimmed, indent=2))
 
@@ -298,6 +317,7 @@ class C0rtexApp(App):
     BINDINGS = [
         Binding("ctrl+c", "quit", "quit"),
         Binding("ctrl+l", "clear_chat", "clear"),
+        Binding("ctrl+y", "copy_last", "copy"),
     ]
 
     def __init__(self) -> None:
@@ -650,6 +670,24 @@ class C0rtexApp(App):
         w = ChatMessage("system", "history cleared.", classes="system-msg")
         chat.mount(w)
 
+    def action_copy_last(self) -> None:
+        """Copy the last assistant message to clipboard."""
+        # find the last assistant message in history
+        for msg in reversed(self.history):
+            if msg.get("role") == "assistant" and msg.get("content"):
+                if copy_to_clipboard(msg["content"]):
+                    self._show_system_msg("copied to clipboard.")
+                else:
+                    self._show_system_msg("clipboard failed — no clipboard tool found.")
+                return
+        self._show_system_msg("nothing to copy.")
+
+    def _show_system_msg(self, text: str) -> None:
+        chat = self.query_one("#chat")
+        w = ChatMessage("system", text, classes="system-msg")
+        chat.mount(w)
+        self._scroll_to_bottom()
+
     def action_quit(self) -> None:
         log.session_end()
         self.exit()
@@ -658,7 +696,7 @@ class C0rtexApp(App):
 # ── entry point ─────────────────────────────────────────────────────────────
 
 def main():
-    CORTEX_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_directories()
     app = C0rtexApp()
     app.run()
 

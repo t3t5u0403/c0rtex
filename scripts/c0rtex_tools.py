@@ -492,15 +492,15 @@ def exec_generate_quiz(source_path: str, count: int = 5) -> str:
 
 # ── system monitoring ─────────────────────────────────────────────────────────
 
-def exec_gpu_status() -> str:
-    """nvidia-smi formatted output: name, temp, util, vram, power."""
+def _gpu_nvidia() -> str | None:
+    """Try nvidia-smi."""
     out, rc = _run_safe([
         "nvidia-smi",
         "--query-gpu=name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw",
         "--format=csv,noheader,nounits",
     ])
     if rc != 0:
-        return f"nvidia-smi error: {out}"
+        return None
     lines = out.strip().splitlines()
     results = []
     for line in lines:
@@ -513,7 +513,114 @@ def exec_gpu_status() -> str:
                 f"  vram:  {parts[3]} / {parts[4]} MiB\n"
                 f"  power: {parts[5]}W"
             )
-    return "\n".join(results) if results else out
+    return "\n".join(results) if results else None
+
+
+def _gpu_amd_sysfs() -> str | None:
+    """Try AMD via sysfs (Linux)."""
+    hwmon = Path("/sys/class/drm")
+    if not hwmon.exists():
+        return None
+    results = []
+    for card in sorted(hwmon.glob("card[0-9]*")):
+        device = card / "device"
+        if not device.exists():
+            continue
+        # check it's an AMD GPU (amdgpu driver)
+        driver = device / "driver"
+        if driver.is_symlink() and "amdgpu" not in str(driver.resolve()):
+            continue
+        name = "AMD GPU"
+        product = device / "product_name"
+        if not product.exists():
+            # try marketing name from hwmon
+            for hw in sorted(device.glob("hwmon/hwmon*")):
+                name_file = hw / "name"
+                if name_file.exists():
+                    name = f"AMD GPU ({name_file.read_text().strip()})"
+                    break
+        else:
+            name = product.read_text().strip()
+        info = f"gpu: {name}"
+        # temperature
+        for hw in sorted(device.glob("hwmon/hwmon*")):
+            temp_file = hw / "temp1_input"
+            if temp_file.exists():
+                try:
+                    temp_c = int(temp_file.read_text().strip()) // 1000
+                    info += f"\n  temp:  {temp_c}C"
+                except (ValueError, OSError):
+                    pass
+                break
+        # utilization
+        busy = device / "gpu_busy_percent"
+        if busy.exists():
+            try:
+                info += f"\n  util:  {busy.read_text().strip()}%"
+            except OSError:
+                pass
+        # vram
+        vram_used = device / "mem_info_vram_used"
+        vram_total = device / "mem_info_vram_total"
+        if vram_used.exists() and vram_total.exists():
+            try:
+                used = int(vram_used.read_text().strip()) // (1024 * 1024)
+                total = int(vram_total.read_text().strip()) // (1024 * 1024)
+                info += f"\n  vram:  {used} / {total} MiB"
+            except (ValueError, OSError):
+                pass
+        # power
+        for hw in sorted(device.glob("hwmon/hwmon*")):
+            power_file = hw / "power1_average"
+            if power_file.exists():
+                try:
+                    watts = int(power_file.read_text().strip()) / 1_000_000
+                    info += f"\n  power: {watts:.1f}W"
+                except (ValueError, OSError):
+                    pass
+                break
+        results.append(info)
+    return "\n".join(results) if results else None
+
+
+def _gpu_amd_rocm() -> str | None:
+    """Try rocm-smi (AMD on Linux/Windows)."""
+    out, rc = _run_safe(["rocm-smi", "--showtemp", "--showuse", "--showmemuse",
+                         "--showpower", "--showproductname"], timeout=10)
+    if rc != 0:
+        return None
+    return out.strip() if out.strip() else None
+
+
+def _gpu_windows_dxgi() -> str | None:
+    """Try PowerShell + Get-CimInstance for GPU info on Windows."""
+    import platform
+    if platform.system() != "Windows":
+        return None
+    ps_script = (
+        "Get-CimInstance Win32_VideoController | "
+        "ForEach-Object { $_.Name + ',' + [math]::Round($_.AdapterRAM/1MB) }"
+    )
+    out, rc = _run_safe(["powershell", "-NoProfile", "-Command", ps_script], timeout=10)
+    if rc != 0:
+        return None
+    results = []
+    for line in out.strip().splitlines():
+        parts = line.rsplit(",", 1)
+        if len(parts) == 2:
+            name = parts[0].strip()
+            vram = parts[1].strip()
+            results.append(f"gpu: {name}\n  vram:  {vram} MiB")
+    return "\n".join(results) if results else None
+
+
+def exec_gpu_status() -> str:
+    """Detect GPU status — tries NVIDIA, AMD (sysfs/rocm-smi), then Windows fallback."""
+    for method in (_gpu_nvidia, _gpu_amd_sysfs, _gpu_amd_rocm, _gpu_windows_dxgi):
+        result = method()
+        if result:
+            return result
+    return "no GPU detected — nvidia-smi, amdgpu sysfs, rocm-smi, and WMI all failed."
 
 
 def exec_disk_status() -> str:
@@ -1098,7 +1205,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "gpu_status",
-            "description": "check GPU temp, utilization, VRAM usage, and power draw via nvidia-smi.",
+            "description": "check GPU temp, utilization, VRAM usage, and power draw. supports NVIDIA (nvidia-smi), AMD (sysfs/rocm-smi), and Windows (WMI).",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },

@@ -11,7 +11,7 @@ import sys
 from datetime import datetime
 from c0rtex_log import get_logger
 from c0rtex_tools import TOOLS, execute_tool
-from c0rtex_paths import CORTEX_DIR, HISTORY_FILE, SOUL_FILE, OLLAMA_HOST, USERNAME
+from c0rtex_paths import CORTEX_DIR, HISTORY_FILE, SOUL_FILE, OLLAMA_HOST, USERNAME, ensure_directories
 
 log = get_logger("c0rtex")
 
@@ -52,7 +52,7 @@ def load_history() -> list:
 
 
 def save_history(messages: list):
-    CORTEX_DIR.mkdir(parents=True, exist_ok=True)
+    HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
     trimmed = messages[-MAX_HISTORY:]
     HISTORY_FILE.write_text(json.dumps(trimmed, indent=2))
 
@@ -259,7 +259,7 @@ def conversation_loop():
 # ── cli entry point ─────────────────────────────────────────────────────────
 
 def main():
-    CORTEX_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_directories()
     log.session_start()
     try:
         if len(sys.argv) > 1:

@@ -507,6 +507,39 @@ def detect_vram():
     except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
         pass
 
+    # try Windows registry (works for NVIDIA, AMD, Intel — 64-bit VRAM value)
+    if platform.system() == "Windows":
+        try:
+            ps_script = (
+                "Get-ItemProperty -Path "
+                "'HKLM:\\SYSTEM\\ControlSet001\\Control\\Class\\"
+                "{4d36e968-e325-11ce-bfc1-08002be10318}\\0*' "
+                "-Name 'HardwareInformation.qwMemorySize','DriverDesc' "
+                "-ErrorAction SilentlyContinue | "
+                "ForEach-Object { $_.DriverDesc + ',' + "
+                "$_.'HardwareInformation.qwMemorySize' }"
+            )
+            result = subprocess.run(
+                ["powershell", "-Command", ps_script],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                best_vram, best_name = 0, ""
+                for line in result.stdout.strip().splitlines():
+                    parts = line.rsplit(",", 1)
+                    if len(parts) == 2:
+                        try:
+                            vram_bytes = int(parts[1])
+                            vram_gb = vram_bytes / (1024 ** 3)
+                            if vram_gb > best_vram:
+                                best_vram, best_name = vram_gb, parts[0].strip()
+                        except (ValueError, OverflowError):
+                            pass
+                if best_vram > 0:
+                    return (round(best_vram, 1), best_name, "win-registry")
+        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+            pass
+
     # try macOS
     if platform.system() == "Darwin":
         try:
@@ -601,6 +634,10 @@ def offer_model_pull(model):
         else:
             fail(f"pull failed. run manually: ollama pull {model}")
             return False
+    except FileNotFoundError:
+        fail("ollama not found in PATH — install from https://ollama.com")
+        info(f"after installing, run: ollama pull {model}")
+        return False
     except subprocess.TimeoutExpired:
         fail(f"pull timed out. run manually: ollama pull {model}")
         return False
@@ -625,15 +662,19 @@ def install_pinchtab():
         return False
 
     # try npm first (cross-platform)
-    if shutil.which("npm"):
+    npm = shutil.which("npm")
+    if npm:
         info("installing via npm...")
-        result = subprocess.run(["npm", "install", "-g", "pinchtab"],
+        result = subprocess.run([npm, "install", "-g", "pinchtab"],
                                 capture_output=True, text=True)
         if result.returncode == 0:
             ok("pinchtab installed via npm")
             return True
         else:
-            fail(f"npm install failed: {result.stderr.strip()}")
+            if platform.system() == "Windows":
+                fail("npm install failed — try running as administrator")
+            else:
+                fail(f"npm install failed: {result.stderr.strip()}")
 
     # try homebrew on macOS
     if platform.system() == "Darwin" and shutil.which("brew"):
@@ -647,8 +688,12 @@ def install_pinchtab():
             fail(f"homebrew install failed: {result.stderr.strip()}")
 
     # fallback
-    fail("couldn't auto-install. run manually:")
-    print("    curl -fsSL https://pinchtab.com/install.sh | bash")
+    if platform.system() == "Windows":
+        fail("couldn't auto-install. run manually (as administrator):")
+        print("    npm install -g pinchtab")
+    else:
+        fail("couldn't auto-install. run manually:")
+        print("    curl -fsSL https://pinchtab.com/install.sh | bash")
     return False
 
 
