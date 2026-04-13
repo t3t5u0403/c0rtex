@@ -41,6 +41,27 @@ from c0rtex_paths import (
     UNIFI_HOST, UNIFI_USER, UNIFI_PASS,
 )
 
+# security constraints
+INJECTION_KEYWORDS = [
+    "ignore previous instructions", 
+    "override safety rules", 
+    "system prompt", 
+    "ignore everything before"
+]
+
+SAFE_COMMAND_WHITELIST = {
+    "git", "ls", "cat", "echo", "grep", "find", "wc", "head", "tail", "date", "pwd"
+}
+
+def validate_input(args: dict) -> str | None:
+    """Layer 1: Reject dangerous patterns in tool parameters."""
+    for val in args.values():
+        if isinstance(val, str):
+            lower_val = val.lower()
+            if any(keyword in lower_val for keyword in INJECTION_KEYWORDS):
+                return "security error: forbidden instruction detected in input."
+    return None
+
 # secondary inference for summarize_document and generate_quiz.
 SUMMARIZE_MODEL = "c0rtex"  # uses the already-loaded model to avoid double vram pressure
 
