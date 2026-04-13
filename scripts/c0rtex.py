@@ -248,6 +248,13 @@ def conversation_loop():
                     result = execute_tool(tool_name, tool_args)
                     log.tool_result(tool_name, result, int((time.time() - _t) * 1000))
 
+                    # --- ADDED MONITORING LOGIC ---
+                    if "security error" in result:
+                        # Log the attempt as a high-priority error for forensic analysis
+                        log.error("security_violation", f"Blocked injection attempt in {tool_name}: {result}")
+                        print(f"  [!] security alert: tool execution blocked.")
+                    # --- END MONITORING LOGIC ---
+
                     tool_msg = {"role": "tool", "content": result}
                     messages.append(tool_msg)
                     history.append(tool_msg)
