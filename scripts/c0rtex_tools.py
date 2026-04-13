@@ -122,6 +122,11 @@ def _check_path(path_str: str, write: bool = False) -> tuple:
 
 
 def _run_safe(args: list, timeout: int = 15) -> tuple:
+    # Layer 3: Capability Restriction [cite: 78]
+    command = args[0]
+    if command not in SAFE_COMMAND_WHITELIST:
+        return f"security error: command '{command}' is not whitelisted.", 1
+
     """
     run a subprocess with explicit list args — no shell=True, no injection risk.
     returns (output_string, returncode).
@@ -1446,6 +1451,10 @@ def execute_tool(name: str, args: dict, log=None) -> str:
     dispatch a tool by name.
     log: optional c0rtex_log.Logger instance (caller handles logging; this is for future sub-event use).
     """
+    validation_err = validate_input(args)
+    if validation_err:
+        return validation_err
+    
     if name not in TOOL_MAP:
         return f"error: unknown tool '{name}'"
     try:
