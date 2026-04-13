@@ -81,6 +81,15 @@ class Logger:
     def error(self, error_type: str, message: str):
         self._write("error", error_type=error_type, message=message)
 
+    def security_alert(self, tool_name, details):
+        """Logs a high-severity security event for forensic tracking."""
+        self.event(
+            "security_violation", 
+            tool=tool_name, 
+            details=details, 
+            severity="CRITICAL"
+        )
+
     def event(self, name: str, **data):
         self._write("system_event", name=name, **data)
 

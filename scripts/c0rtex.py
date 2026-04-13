@@ -246,10 +246,22 @@ def conversation_loop():
                     log.tool_call(tool_name, tool_args)
                     _t = time.time()
                     result = execute_tool(tool_name, tool_args)
+
+                    # --- ADDED: FORENSIC ARCHIVING ---
+                    if "security error" in result:
+                        # 1. Log the critical alert for the forensics dashboard
+                        log.security_alert(tool_name, result)
+                        
+                        # 2. Notify the local console immediately
+                        print(f"  [!] SECURITY VIOLATION: Execution of {tool_name} blocked.")
+                    # ---------------------------------
+
+
                     log.tool_result(tool_name, result, int((time.time() - _t) * 1000))
 
                     # --- ADDED MONITORING LOGIC ---
                     if "security error" in result:
+                        log.security_alert(tool_name, result)
                         # Log the attempt as a high-priority error for forensic analysis
                         log.error("security_violation", f"Blocked injection attempt in {tool_name}: {result}")
                         print(f"  [!] security alert: tool execution blocked.")
