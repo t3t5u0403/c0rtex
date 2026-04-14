@@ -1,5 +1,5 @@
 """
-ollama_monitor — Ollama status checker for the display server.
+ollama_monitor — Ollama status checker for the display server. Testing
 """
 
 import requests
